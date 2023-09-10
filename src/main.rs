@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use clap::Parser;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
@@ -14,11 +15,16 @@ use ratatui::{layout::Constraint::*, prelude::*, widgets::*};
 struct App<'a> {
     data: &'a [u8],
     selected: usize,
+    filename: Option<String>,
 }
 
 impl<'a> App<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Self { selected: 0, data }
+    fn new(data: &'a [u8], filename: Option<String>) -> Self {
+        Self {
+            selected: 0,
+            data,
+            filename,
+        }
     }
 
     fn left(&mut self) {
@@ -205,7 +211,19 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     f.render_widget(list, rects[1])
 }
 
+#[derive(Parser, Debug)]
+struct Args {
+    file: Option<String>,
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
+    let data = match &args.file {
+        Some(f) => std::fs::read(f).unwrap_or(vec![0]),
+        None => vec![0],
+    };
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -214,8 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let tick_rate = Duration::from_millis(250);
 
-    let data = b"0123456789abcdef0123456789ghijkl0".to_vec();
-    let app = App::new(&data);
+    let app = App::new(&data, args.file);
     let res = run_app(&mut terminal, app, tick_rate);
 
     disable_raw_mode()?;
