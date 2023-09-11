@@ -1,6 +1,5 @@
 use std::{
     error::Error,
-    io,
     time::{Duration, Instant},
 };
 
@@ -12,18 +11,25 @@ use crossterm::{
 };
 use ratatui::{layout::Constraint::*, prelude::*, widgets::*};
 
+enum Mode {
+    Normal,
+    Insert,
+}
+
 struct App<'a> {
-    data: &'a [u8],
+    data: &'a mut Vec<u8>,
     selected: usize,
     filename: Option<String>,
+    mode: Mode,
 }
 
 impl<'a> App<'a> {
-    fn new(data: &'a [u8], filename: Option<String>) -> Self {
+    fn new(data: &'a mut Vec<u8>, filename: Option<String>) -> Self {
         Self {
             selected: 0,
             data,
             filename,
+            mode: Mode::Normal,
         }
     }
 
@@ -50,14 +56,45 @@ impl<'a> App<'a> {
     fn down(&mut self) {
         self.selected = std::cmp::min(self.data.len() - 1, self.selected + 16);
     }
+
+    fn set(&mut self, value: u8) {
+        self.data[self.selected] = value;
+    }
+
+    fn flush(&mut self) {
+        if let Some(path) = &self.filename {
+            let _ = std::fs::write(path, &self.data);
+        }
+    }
+
+    fn append(&mut self) {
+        if self.selected + 1 < self.data.len() {
+            self.data.insert(self.selected + 1, 0);
+        } else {
+            self.data.push(0);
+        }
+
+        self.right();
+    }
+
+    fn delete(&mut self) {
+        if self.data.len() > 1 {
+            self.data.remove(self.selected);
+        } else {
+            self.data[0] = 0;
+        }
+    }
 }
 
 fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
     tick_rate: Duration,
-) -> io::Result<()> {
+) -> std::io::Result<()> {
     let mut last_tick = Instant::now();
+
+    let mut input = None;
+
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
@@ -67,12 +104,29 @@ fn run_app<B: Backend>(
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Char('h') => app.left(),
-                        KeyCode::Char('j') => app.down(),
-                        KeyCode::Char('k') => app.up(),
-                        KeyCode::Char('l') => app.right(),
+                    match (&app.mode, key.code) {
+                        (Mode::Normal, KeyCode::Char('q')) => return Ok(()),
+                        (Mode::Normal, KeyCode::Char('h')) => app.left(),
+                        (Mode::Normal, KeyCode::Char('j')) => app.down(),
+                        (Mode::Normal, KeyCode::Char('k')) => app.up(),
+                        (Mode::Normal, KeyCode::Char('l')) => app.right(),
+                        (Mode::Normal, KeyCode::Char('i')) => app.mode = Mode::Insert,
+                        (Mode::Normal, KeyCode::Char('w')) => app.flush(),
+                        (Mode::Normal, KeyCode::Char('d')) => app.delete(),
+                        (Mode::Normal, KeyCode::Char('o')) => {
+                            app.append();
+                            app.mode = Mode::Insert;
+                        }
+                        (Mode::Insert, KeyCode::Esc) => app.mode = Mode::Normal,
+                        (Mode::Insert, KeyCode::Char(c)) => match (input, c.to_digit(16)) {
+                            (None, Some(b)) => input = Some(b),
+                            (Some(a), Some(b)) => {
+                                app.set((a * 16 + b) as u8);
+                                app.right();
+                                input = None;
+                            }
+                            _ => {}
+                        },
                         // KeyCode::Down => app.list.next(),
                         _ => {}
                     }
@@ -219,20 +273,20 @@ struct Args {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let data = match &args.file {
+    let mut data = match &args.file {
         Some(f) => std::fs::read(f).unwrap_or(vec![0]),
         None => vec![0],
     };
 
     enable_raw_mode()?;
-    let mut stdout = io::stdout();
+    let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     let tick_rate = Duration::from_millis(250);
 
-    let app = App::new(&data, args.file);
+    let app = App::new(&mut data, args.file);
     let res = run_app(&mut terminal, app, tick_rate);
 
     disable_raw_mode()?;
