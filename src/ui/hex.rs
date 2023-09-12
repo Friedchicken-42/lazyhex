@@ -30,7 +30,7 @@ pub fn hex(app: &App) -> impl Widget {
         })
         .collect();
 
-    let highlights = vec![(app.selected..=app.selected, Color::DarkGray)];
+    let highlights = vec![(app.selection.start..=app.selection.end, Color::DarkGray)];
 
     for (highlight, color) in highlights {
         for (i, selected) in highlight.enumerate() {

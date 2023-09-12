@@ -38,23 +38,28 @@ fn run_app<B: Backend>(
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     match (&app.mode, key.code) {
-                        (Mode::Normal, KeyCode::Char('q')) => return Ok(()),
-                        (Mode::Normal, KeyCode::Char('h')) => app.left(),
-                        (Mode::Normal, KeyCode::Char('j')) => app.down(),
-                        (Mode::Normal, KeyCode::Char('k')) => app.up(),
-                        (Mode::Normal, KeyCode::Char('l')) => app.right(),
-                        (Mode::Normal, KeyCode::Char('i')) => app.mode = Mode::Insert,
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('q')) => return Ok(()),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.left(),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.down(),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.up(),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.right(),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('i')) => {
+                            app.mode = Mode::Insert
+                        }
                         (Mode::Normal, KeyCode::Char('w')) => app.flush(),
-                        (Mode::Normal, KeyCode::Char('d')) => app.delete(),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.delete(),
                         (Mode::Normal, KeyCode::Char('o')) => {
                             app.append();
                             app.mode = Mode::Insert;
+                            app.right();
                         }
-                        (Mode::Insert, KeyCode::Esc) => app.mode = Mode::Normal,
+                        (Mode::Normal, KeyCode::Char('v')) => app.mode = Mode::Visual,
+                        (_, KeyCode::Esc) => app.mode = Mode::Normal,
                         (Mode::Insert, KeyCode::Char(c)) => match (input, c.to_digit(16)) {
                             (None, Some(b)) => input = Some(b),
                             (Some(a), Some(b)) => {
                                 app.set((a * 16 + b) as u8);
+                                app.mode = Mode::Normal;
                                 app.right();
                                 input = None;
                             }

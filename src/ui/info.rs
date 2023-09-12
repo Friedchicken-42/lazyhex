@@ -16,10 +16,10 @@ fn slice(data: &[u8], offset: usize, length: usize) -> Vec<u8> {
 }
 
 pub fn info(app: &App) -> impl Widget {
-    let byte = slice(&app.data, app.selected, 1)[0];
+    let byte = slice(&app.data, app.selection.start, 1)[0];
 
     let mut integer: u32 = 0;
-    for b in slice(&app.data, app.selected, 4) {
+    for b in slice(&app.data, app.selection.start, 4) {
         integer = (integer << 8) | u32::from(b);
     }
 
