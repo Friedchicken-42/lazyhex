@@ -1,11 +1,11 @@
 use ratatui::{
     prelude::Alignment,
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Padding, Paragraph, Widget},
 };
 
-use crate::app::App;
+use crate::app::{App, Highlight};
 
 fn convert(x: usize) -> (usize, usize) {
     let col = x / 16;
@@ -30,18 +30,19 @@ pub fn hex(app: &App) -> impl Widget {
         })
         .collect();
 
-    let highlights = vec![(app.selection.start..=app.selection.end, Color::DarkGray)];
+    let selection = [app.selection];
+    let highlights = app.highlights.iter().chain(selection.iter());
 
-    for (highlight, color) in highlights {
-        for (i, selected) in highlight.enumerate() {
+    for Highlight { start, end, color } in highlights {
+        for (i, selected) in (*start..=*end).enumerate() {
             let (col, row) = convert(selected);
-            spans[col][row].patch_style(Style::default().bg(color));
+            spans[col][row].patch_style(Style::default().bg(*color));
 
             if i != 0 {
                 let (colp, rowp) = convert(selected - 1);
 
                 if col == colp && row - rowp == 2 {
-                    spans[col][row - 1].patch_style(Style::default().bg(color));
+                    spans[col][row - 1].patch_style(Style::default().bg(*color));
                 }
             }
         }

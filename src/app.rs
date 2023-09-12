@@ -1,3 +1,5 @@
+use ratatui::style::Color;
+
 #[derive(PartialEq)]
 pub enum Mode {
     Normal,
@@ -5,25 +7,33 @@ pub enum Mode {
     Visual,
 }
 
-pub struct Selection {
+#[derive(Clone, Copy)]
+pub struct Highlight {
     pub start: usize,
     pub end: usize,
+    pub color: Color,
 }
 
 pub struct App<'a> {
     pub data: &'a mut Vec<u8>,
-    pub selection: Selection,
+    pub selection: Highlight,
     pub filename: Option<String>,
     pub mode: Mode,
+    pub highlights: Vec<Highlight>,
 }
 
 impl<'a> App<'a> {
     pub fn new(data: &'a mut Vec<u8>, filename: Option<String>) -> Self {
         Self {
-            selection: Selection { start: 0, end: 0 },
+            selection: Highlight {
+                start: 0,
+                end: 0,
+                color: Color::DarkGray,
+            },
             data,
             filename,
             mode: Mode::Normal,
+            highlights: vec![],
         }
     }
 
@@ -94,7 +104,7 @@ impl<'a> App<'a> {
     pub fn delete(&mut self) {
         self.data.drain(self.selection.start..=self.selection.end);
 
-        if self.data.len() == 0 {
+        if self.data.is_empty() {
             self.data.push(0);
         }
 

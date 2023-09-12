@@ -24,12 +24,12 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .constraints(vec![Length(11), Length(52), Length(19)])
         .split(rects[0]);
 
-    f.render_widget(index(&app), main[0]);
-    f.render_widget(hex(&app), main[1]);
-    f.render_widget(table(&app), main[2]);
+    f.render_widget(index(app), main[0]);
+    f.render_widget(hex(app), main[1]);
+    f.render_widget(table(app), main[2]);
 
     let block = Block::default().borders(Borders::ALL).title("Hex");
     f.render_widget(block, rects[0]);
 
-    f.render_widget(info(&app), rects[1])
+    f.render_widget(info(app), rects[1])
 }
