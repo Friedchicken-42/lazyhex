@@ -22,6 +22,8 @@ pub struct App<'a> {
     pub highlights: Vec<Highlight>,
 }
 
+const COLORS: [Color; 4] = [Color::Red, Color::Green, Color::Yellow, Color::Blue];
+
 impl<'a> App<'a> {
     pub fn new(data: &'a mut Vec<u8>, filename: Option<&'a str>) -> Self {
         Self {
@@ -109,5 +111,14 @@ impl<'a> App<'a> {
         }
 
         self.selection.end = std::cmp::min(self.selection.end, self.data.len() - 1);
+    }
+
+    pub fn highlight(&mut self) {
+        let color = COLORS[self.highlights.len() % COLORS.len()];
+
+        self.highlights.push(Highlight {
+            color,
+            ..self.selection
+        });
     }
 }

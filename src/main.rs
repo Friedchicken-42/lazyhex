@@ -54,6 +54,11 @@ fn run_app<B: Backend>(
                             app.right();
                         }
                         (Mode::Normal, KeyCode::Char('v')) => app.mode = Mode::Visual,
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('H')) => {
+                            app.highlight();
+                            app.mode = Mode::Normal;
+                            app.right();
+                        }
                         (_, KeyCode::Esc) => app.mode = Mode::Normal,
                         (Mode::Insert, KeyCode::Char(c)) => match (input, c.to_digit(16)) {
                             (None, Some(b)) => input = Some(b),
