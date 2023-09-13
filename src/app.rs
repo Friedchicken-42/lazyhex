@@ -17,13 +17,13 @@ pub struct Highlight {
 pub struct App<'a> {
     pub data: &'a mut Vec<u8>,
     pub selection: Highlight,
-    pub filename: Option<String>,
+    pub filename: Option<&'a str>,
     pub mode: Mode,
     pub highlights: Vec<Highlight>,
 }
 
 impl<'a> App<'a> {
-    pub fn new(data: &'a mut Vec<u8>, filename: Option<String>) -> Self {
+    pub fn new(data: &'a mut Vec<u8>, filename: Option<&'a str>) -> Self {
         Self {
             selection: Highlight {
                 start: 0,

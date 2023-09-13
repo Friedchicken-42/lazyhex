@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let tick_rate = Duration::from_millis(250);
 
-    let app = App::new(&mut data, args.file);
+    let app = App::new(&mut data, args.file.as_deref());
     let res = run_app(&mut terminal, app, tick_rate);
 
     disable_raw_mode()?;
