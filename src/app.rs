@@ -27,6 +27,7 @@ pub struct App<'a> {
     pub filename: Option<&'a str>,
     pub mode: Mode,
     pub highlights: Vec<Highlight>,
+    pub edited: bool,
 }
 
 const COLORS: [Color; 4] = [Color::Red, Color::Green, Color::Yellow, Color::Blue];
@@ -37,12 +38,13 @@ impl<'a> App<'a> {
             selection: Highlight {
                 start: 0,
                 end: 0,
-                color: Color::Gray,
+                color: Color::DarkGray,
             },
             data,
             filename,
             mode: Mode::Normal,
             highlights: vec![],
+            edited: false,
         }
     }
 
@@ -91,6 +93,7 @@ impl<'a> App<'a> {
     }
 
     pub fn set(&mut self, value: u8) {
+        self.edited = true;
         for selected in self.selection.start..=self.selection.end {
             self.data[selected] = value;
         }
@@ -99,10 +102,12 @@ impl<'a> App<'a> {
     pub fn flush(&mut self) {
         if let Some(path) = &self.filename {
             let _ = std::fs::write(path, &self.data);
+            self.edited = false;
         }
     }
 
     pub fn append(&mut self) {
+        self.edited = true;
         if self.selection.end + 1 < self.data.len() {
             self.data.insert(self.selection.end + 1, 0);
         } else {
@@ -111,6 +116,7 @@ impl<'a> App<'a> {
     }
 
     pub fn delete(&mut self) {
+        self.edited = true;
         self.data.drain(self.selection.start..=self.selection.end);
 
         if self.data.is_empty() {

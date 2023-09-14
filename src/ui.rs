@@ -27,7 +27,8 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     let file = app.filename.unwrap_or("");
 
-    let header = Paragraph::new(format!("  {mode}  |  {file}"))
+    let edited = if app.edited { "*" } else { "" };
+    let header = Paragraph::new(format!("  {mode}  |  {file}{edited}"))
         .block(Block::default().title("Lazyhex").borders(Borders::ALL));
 
     f.render_widget(header, layout[0]);
