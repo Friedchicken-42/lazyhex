@@ -47,7 +47,12 @@ fn run_app<B: Backend>(
                             app.mode = Mode::Insert
                         }
                         (Mode::Normal, KeyCode::Char('w')) => app.flush(),
-                        (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.delete(),
+                        (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => {
+                            app.delete();
+                            app.selection.set(app.selection.start);
+                            app.mode = Mode::Normal;
+                            app.left();
+                        }
                         (Mode::Normal, KeyCode::Char('o')) => {
                             app.append();
                             app.mode = Mode::Insert;
@@ -57,14 +62,16 @@ fn run_app<B: Backend>(
                         (Mode::Normal | Mode::Visual, KeyCode::Char('H')) => {
                             app.highlight();
                             app.mode = Mode::Normal;
-                            app.right();
                         }
+                        (Mode::Normal, KeyCode::Char('g')) => app.selection.set(0),
+                        (Mode::Normal, KeyCode::Char('0')) => app
+                            .selection
+                            .set(app.selection.start - app.selection.start % 16),
                         (_, KeyCode::Esc) => app.mode = Mode::Normal,
                         (Mode::Insert, KeyCode::Char(c)) => match (input, c.to_digit(16)) {
                             (None, Some(b)) => input = Some(b),
                             (Some(a), Some(b)) => {
                                 app.set((a * 16 + b) as u8);
-                                app.mode = Mode::Normal;
                                 app.right();
                                 input = None;
                             }

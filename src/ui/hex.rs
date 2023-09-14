@@ -15,7 +15,7 @@ fn convert(x: usize) -> (usize, usize) {
     (col, row)
 }
 
-pub fn hex(app: &App) -> impl Widget {
+pub fn hex(app: &App, height: usize) -> impl Widget {
     let mut spans: Vec<_> = app
         .data
         .chunks(16)
@@ -53,7 +53,17 @@ pub fn hex(app: &App) -> impl Widget {
     let mut header: Vec<_> = (0..16).map(|i| Span::from(format!(" {i:x} "))).collect();
     header.insert(8, Span::raw(" "));
     let header = Line::from(header);
-    let spans: Vec<_> = [header].into_iter().chain(spans).collect();
+
+    let skip = if app.selection.end / 16 > height - 1 {
+        app.selection.end / 16 + 1 - height
+    } else {
+        0
+    };
+
+    let spans: Vec<_> = [header]
+        .into_iter()
+        .chain(spans.skip(skip).take(height))
+        .collect();
 
     Paragraph::new(spans)
         .block(

@@ -14,6 +14,13 @@ pub struct Highlight {
     pub color: Color,
 }
 
+impl Highlight {
+    pub fn set(&mut self, pos: usize) {
+        self.start = pos;
+        self.end = pos;
+    }
+}
+
 pub struct App<'a> {
     pub data: &'a mut Vec<u8>,
     pub selection: Highlight,
@@ -30,7 +37,7 @@ impl<'a> App<'a> {
             selection: Highlight {
                 start: 0,
                 end: 0,
-                color: Color::DarkGray,
+                color: Color::Gray,
             },
             data,
             filename,
@@ -45,9 +52,9 @@ impl<'a> App<'a> {
         }
 
         if self.mode == Mode::Normal {
-            self.selection.start = self.selection.end;
+            self.selection.set(self.selection.end);
         } else if self.mode == Mode::Visual && self.selection.end < self.selection.start {
-            self.selection.end = self.selection.start;
+            self.selection.set(self.selection.start);
         }
     }
 
@@ -56,8 +63,8 @@ impl<'a> App<'a> {
             self.selection.end += 1;
         }
 
-        if self.mode == Mode::Normal {
-            self.selection.start = self.selection.end;
+        if self.mode != Mode::Visual {
+            self.selection.set(self.selection.end);
         }
     }
 
@@ -68,9 +75,9 @@ impl<'a> App<'a> {
             self.selection.end -= 16;
         }
 
-        if self.mode == Mode::Normal {
-            self.selection.start = self.selection.end;
-        } else if self.mode == Mode::Visual {
+        if self.mode != Mode::Visual {
+            self.selection.set(self.selection.end);
+        } else {
             self.selection.end = std::cmp::max(self.selection.start, self.selection.end);
         }
     }
@@ -78,8 +85,8 @@ impl<'a> App<'a> {
     pub fn down(&mut self) {
         self.selection.end = std::cmp::min(self.data.len() - 1, self.selection.end + 16);
 
-        if self.mode == Mode::Normal {
-            self.selection.start = self.selection.end;
+        if self.mode != Mode::Visual {
+            self.selection.set(self.selection.end);
         }
     }
 

@@ -6,7 +6,13 @@ use ratatui::{
 
 use crate::app::App;
 
-pub fn table(app: &App) -> impl Widget {
+pub fn table(app: &App, height: usize) -> impl Widget {
+    let skip = if app.selection.end / 16 > height - 1 {
+        app.selection.end / 16 + 1 - height
+    } else {
+        0
+    };
+
     let table: Vec<_> = app
         .data
         .chunks(16)
@@ -20,6 +26,8 @@ pub fn table(app: &App) -> impl Widget {
                 .collect::<String>()
         })
         .map(|s| Line::from(s))
+        .skip(skip)
+        .take(height)
         .collect();
 
     Paragraph::new(table)

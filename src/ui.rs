@@ -27,7 +27,7 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     let file = app.filename.unwrap_or("");
 
-    let header = Paragraph::new(format!(" {mode}   |  {file}"))
+    let header = Paragraph::new(format!("  {mode}  |  {file}"))
         .block(Block::default().title("Lazyhex").borders(Borders::ALL));
 
     f.render_widget(header, layout[0]);
@@ -42,9 +42,10 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .constraints(vec![Length(11), Length(52), Length(19)])
         .split(body[0]);
 
-    f.render_widget(index(app), main[0]);
-    f.render_widget(hex(app), main[1]);
-    f.render_widget(table(app), main[2]);
+    let height = (body[0].height - 3) as usize;
+    f.render_widget(index(app, height), main[0]);
+    f.render_widget(hex(app, height), main[1]);
+    f.render_widget(table(app, height), main[2]);
 
     let block = Block::default().borders(Borders::ALL).title("Hex");
     f.render_widget(block, body[0]);
