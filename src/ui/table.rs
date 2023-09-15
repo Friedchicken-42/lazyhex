@@ -4,16 +4,16 @@ use ratatui::{
     widgets::{Block, Padding, Paragraph, Widget},
 };
 
-use crate::app::App;
+use crate::viewer::Viewer;
 
-pub fn table(app: &App, height: usize) -> impl Widget {
-    let skip = if app.selection.end / 16 > height - 1 {
-        app.selection.end / 16 + 1 - height
+pub fn table(viewer: &Viewer, height: usize) -> impl Widget {
+    let skip = if viewer.selection.end / 16 > height - 1 {
+        viewer.selection.end / 16 + 1 - height
     } else {
         0
     };
 
-    let table: Vec<_> = app
+    let table: Vec<_> = viewer
         .data
         .chunks(16)
         .map(|chunk| {

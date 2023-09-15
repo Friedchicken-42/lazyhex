@@ -11,7 +11,8 @@ pub enum Mode {
 pub struct Highlight {
     pub start: usize,
     pub end: usize,
-    pub color: Color,
+    pub bg: Color,
+    pub fg: Color,
 }
 
 impl Highlight {
@@ -21,7 +22,7 @@ impl Highlight {
     }
 }
 
-pub struct App<'a> {
+pub struct Viewer<'a> {
     pub data: &'a mut Vec<u8>,
     pub selection: Highlight,
     pub filename: Option<&'a str>,
@@ -30,15 +31,21 @@ pub struct App<'a> {
     pub edited: bool,
 }
 
-const COLORS: [Color; 4] = [Color::Red, Color::Green, Color::Yellow, Color::Blue];
+const COLORS: [(Color, Color); 4] = [
+    (Color::Red, Color::White),
+    (Color::Green, Color::White),
+    (Color::Yellow, Color::Black),
+    (Color::Blue, Color::White),
+];
 
-impl<'a> App<'a> {
+impl<'a> Viewer<'a> {
     pub fn new(data: &'a mut Vec<u8>, filename: Option<&'a str>) -> Self {
         Self {
             selection: Highlight {
                 start: 0,
                 end: 0,
-                color: Color::DarkGray,
+                bg: Color::DarkGray,
+                fg: Color::White,
             },
             data,
             filename,
@@ -127,10 +134,11 @@ impl<'a> App<'a> {
     }
 
     pub fn highlight(&mut self) {
-        let color = COLORS[self.highlights.len() % COLORS.len()];
+        let (bg, fg) = COLORS[self.highlights.len() % COLORS.len()];
 
         self.highlights.push(Highlight {
-            color,
+            bg,
+            fg,
             ..self.selection
         });
     }

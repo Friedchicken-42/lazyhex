@@ -2,10 +2,10 @@ use ratatui::{
     prelude::Alignment,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Padding, Paragraph, Widget},
+    widgets::Paragraph,
 };
 
-use crate::app::{App, Highlight};
+use crate::viewer::{Highlight, Viewer};
 
 fn convert(x: usize) -> (usize, usize) {
     let col = x / 16;
@@ -15,8 +15,8 @@ fn convert(x: usize) -> (usize, usize) {
     (col, row)
 }
 
-pub fn hex(app: &App, height: usize) -> impl Widget {
-    let mut spans: Vec<_> = app
+pub fn hex<'a>(viewer: &Viewer, height: usize) -> Paragraph<'a> {
+    let mut spans: Vec<_> = viewer
         .data
         .chunks(16)
         .map(|chunk| chunk.iter().map(|n| Span::from(format!("{n:02x}"))))
@@ -30,19 +30,19 @@ pub fn hex(app: &App, height: usize) -> impl Widget {
         })
         .collect();
 
-    let selection = [app.selection];
-    let highlights = app.highlights.iter().chain(selection.iter());
+    let selection = [viewer.selection];
+    let highlights = viewer.highlights.iter().chain(selection.iter());
 
-    for Highlight { start, end, color } in highlights {
+    for Highlight { start, end, bg, fg } in highlights {
         for (i, selected) in (*start..=*end).enumerate() {
             let (col, row) = convert(selected);
-            spans[col][row].patch_style(Style::default().bg(*color));
+            spans[col][row].patch_style(Style::default().bg(*bg).fg(*fg));
 
             if i != 0 {
                 let (colp, rowp) = convert(selected - 1);
 
                 if col == colp && row - rowp == 2 {
-                    spans[col][row - 1].patch_style(Style::default().bg(*color));
+                    spans[col][row - 1].patch_style(Style::default().bg(*bg).fg(*fg));
                 }
             }
         }
@@ -54,8 +54,8 @@ pub fn hex(app: &App, height: usize) -> impl Widget {
     header.insert(8, Span::raw(" "));
     let header = Line::from(header);
 
-    let skip = if app.selection.end / 16 > height - 1 {
-        app.selection.end / 16 + 1 - height
+    let skip = if viewer.selection.end / 16 > height - 1 {
+        viewer.selection.end / 16 + 1 - height
     } else {
         0
     };
@@ -65,11 +65,5 @@ pub fn hex(app: &App, height: usize) -> impl Widget {
         .chain(spans.skip(skip).take(height))
         .collect();
 
-    Paragraph::new(spans)
-        .block(
-            Block::default()
-                .padding(Padding::uniform(1))
-                .borders(Borders::RIGHT | Borders::LEFT),
-        )
-        .alignment(Alignment::Center)
+    Paragraph::new(spans).alignment(Alignment::Center)
 }

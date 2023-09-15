@@ -1,6 +1,6 @@
 use ratatui::widgets::{Block, Borders, List, ListItem, Padding, Widget};
 
-use crate::app::App;
+use crate::viewer::Viewer;
 
 fn slice(data: &[u8], offset: usize, length: usize) -> Vec<u8> {
     let mut v = vec![0; length];
@@ -15,17 +15,17 @@ fn slice(data: &[u8], offset: usize, length: usize) -> Vec<u8> {
     v
 }
 
-pub fn info(app: &App) -> impl Widget {
-    let byte = slice(app.data, app.selection.start, 1)[0];
+pub fn info(viewer: &Viewer) -> impl Widget {
+    let byte = slice(viewer.data, viewer.selection.start, 1)[0];
 
-    let long = slice(app.data, app.selection.start, 8)
+    let long = slice(viewer.data, viewer.selection.start, 8)
         .into_iter()
         .fold(0, |acc, x| (acc << 8) | u64::from(x));
 
     let string = slice(
-        app.data,
-        app.selection.start,
-        app.selection.end - app.selection.start + 1,
+        viewer.data,
+        viewer.selection.start,
+        viewer.selection.end - viewer.selection.start + 1,
     );
     let string: String = string.iter().map(|c| *c as char).collect();
 
