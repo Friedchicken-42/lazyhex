@@ -98,7 +98,6 @@ impl<'a> Comparator<'a> {
                                 .insert(old_index + old_len + offset_old, None);
                         }
                         offset_old += distance;
-                        replaced += distance;
                     } else {
                         let distance = old_len - new_len;
                         for _ in 0..distance {
@@ -107,8 +106,8 @@ impl<'a> Comparator<'a> {
                                 .insert(new_index + new_len + offset_new, None);
                         }
                         offset_new += distance;
-                        replaced += distance;
                     }
+                    replaced += std::cmp::max(old_len, new_len);
                 }
             }
         }

@@ -5,7 +5,8 @@ Set Width 1400
 Set Height 700
 Set Shell zsh
 
-Type "cargo run -- Cargo.lock"
+Type "lazyhex Cargo.lock"
+Sleep 2s
 Enter
 
 Sleep 2s
@@ -18,4 +19,10 @@ Sleep 2s
 Escape
 Type@400ms "k0"
 
+Sleep 5s
+
+Type "q"
+Type "lazyhex a.txt b.txt"
+Sleep 2s
+Enter
 Sleep 5s
