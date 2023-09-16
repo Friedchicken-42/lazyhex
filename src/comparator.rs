@@ -12,8 +12,8 @@ pub struct Comparator<'a> {
 
 impl<'a> Comparator<'a> {
     pub fn new(
-        data_old: &'a mut Vec<u8>,
-        data_new: &'a mut Vec<u8>,
+        data_old: &'a mut Vec<Option<u8>>,
+        data_new: &'a mut Vec<Option<u8>>,
         file_old: &'a str,
         file_new: &'a str,
     ) -> Self {
@@ -26,32 +26,47 @@ impl<'a> Comparator<'a> {
         let mut deleted = 0;
         let mut replaced = 0;
 
+        let mut offset_old = 0;
+        let mut offset_new = 0;
+
         for diff in diffs {
             match diff {
                 similar::DiffOp::Equal { .. } => {}
                 similar::DiffOp::Delete {
-                    old_index, old_len, ..
+                    old_index,
+                    old_len,
+                    new_index,
                 } => {
                     let highlight = Highlight {
-                        start: old_index,
-                        end: old_index + old_len - 1,
+                        start: old_index + offset_old,
+                        end: old_index + old_len + offset_old - 1,
                         bg: Color::Red,
                         fg: Color::White,
                     };
+                    for _ in 0..old_len {
+                        viewer_new.data.insert(new_index + offset_new, None);
+                    }
+                    offset_new += old_len;
                     viewer_old.highlights.push(highlight);
-                    deleted += 1;
+                    deleted += old_len;
                 }
                 similar::DiffOp::Insert {
-                    new_index, new_len, ..
+                    new_index,
+                    new_len,
+                    old_index,
                 } => {
                     let highlight = Highlight {
-                        start: new_index,
-                        end: new_index + new_len - 1,
+                        start: new_index + offset_new,
+                        end: new_index + new_len + offset_new - 1,
                         bg: Color::Green,
                         fg: Color::White,
                     };
+                    for _ in 0..new_len {
+                        viewer_old.data.insert(old_index + offset_old, None);
+                    }
+                    offset_old += new_len;
                     viewer_new.highlights.push(highlight);
-                    added += 1;
+                    added += new_len;
                 }
                 similar::DiffOp::Replace {
                     old_index,
@@ -60,20 +75,40 @@ impl<'a> Comparator<'a> {
                     new_len,
                 } => {
                     let highlight = Highlight {
-                        start: old_index,
-                        end: old_index + old_len - 1,
+                        start: old_index + offset_old,
+                        end: old_index + old_len + offset_old - 1,
                         bg: Color::Yellow,
                         fg: Color::Black,
                     };
                     viewer_old.highlights.push(highlight);
+
                     let highlight = Highlight {
-                        start: new_index,
-                        end: new_index + new_len - 1,
+                        start: new_index + offset_new,
+                        end: new_index + new_len + offset_new - 1,
                         bg: Color::Yellow,
                         fg: Color::Black,
                     };
                     viewer_new.highlights.push(highlight);
-                    replaced += 1;
+
+                    if new_len > old_len {
+                        let distance = new_len - old_len;
+                        for _ in 0..distance {
+                            viewer_old
+                                .data
+                                .insert(old_index + old_len + offset_old, None);
+                        }
+                        offset_old += distance;
+                        replaced += distance;
+                    } else {
+                        let distance = old_len - new_len;
+                        for _ in 0..distance {
+                            viewer_new
+                                .data
+                                .insert(new_index + new_len + offset_new, None);
+                        }
+                        offset_new += distance;
+                        replaced += distance;
+                    }
                 }
             }
         }

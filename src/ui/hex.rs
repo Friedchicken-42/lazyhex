@@ -19,7 +19,12 @@ pub fn hex<'a>(viewer: &Viewer, height: usize) -> Paragraph<'a> {
     let mut spans: Vec<_> = viewer
         .data
         .chunks(16)
-        .map(|chunk| chunk.iter().map(|n| Span::from(format!("{n:02x}"))))
+        .map(|chunk| {
+            chunk.iter().map(|n| match n {
+                Some(x) => Span::from(format!("{x:02x}")),
+                None => Span::raw("  "),
+            })
+        })
         .map(|chunk| {
             let len = chunk.len();
             let chunk = chunk.chain((len..16).map(|_| Span::raw("  ")));

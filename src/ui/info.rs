@@ -2,14 +2,23 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Padding, Widget};
 
 use crate::viewer::Viewer;
 
-fn slice(data: &[u8], offset: usize, length: usize) -> Vec<u8> {
+fn slice(data: &[Option<u8>], offset: usize, length: usize) -> Vec<u8> {
     let mut v = vec![0; length];
+    let mut offset = offset;
 
-    for (i, value) in v.iter_mut().enumerate().take(length) {
-        *value = match data.get(i + offset) {
-            Some(n) => *n,
-            None => 0,
-        };
+    let mut i = 0;
+    while i < length {
+        if let Some(x) = data.get(i + offset) {
+            if let Some(y) = x {
+                v[i] = *y;
+                i += 1;
+            } else {
+                offset += 1;
+            }
+        } else {
+            v[i] = 0;
+            i += 1;
+        }
     }
 
     v

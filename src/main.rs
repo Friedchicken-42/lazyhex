@@ -74,7 +74,7 @@ fn run_viewer<B: Backend>(
                         (Mode::Insert, KeyCode::Char(c)) => match (input, c.to_digit(16)) {
                             (None, Some(b)) => input = Some(b),
                             (Some(a), Some(b)) => {
-                                viewer.set((a * 16 + b) as u8);
+                                viewer.set(Some((a * 16 + b) as u8));
                                 viewer.right();
                                 input = None;
                             }
@@ -143,31 +143,35 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let res = match (&args.file, &args.other) {
         (None, None) => {
-            let mut data = vec![0];
+            let mut data = vec![Some(0)];
             let viewer = Viewer::new(&mut data, args.file.as_deref());
             run_viewer(&mut terminal, viewer, tick_rate)
         }
         (Some(f), None) => {
-            let mut data = std::fs::read(f).unwrap_or(vec![0]);
+            let mut data = std::fs::read(f)
+                .unwrap_or(vec![0])
+                .into_iter()
+                .map(|n| Some(n))
+                .collect();
             let viewer = Viewer::new(&mut data, args.file.as_deref());
             run_viewer(&mut terminal, viewer, tick_rate)
         }
         (Some(a), Some(b)) => {
-            let mut adata = std::fs::read(a).unwrap_or(vec![0]);
-            let mut bdata = std::fs::read(b).unwrap_or(vec![0]);
+            let mut adata = std::fs::read(a)
+                .unwrap_or(vec![0])
+                .into_iter()
+                .map(|n| Some(n))
+                .collect();
+            let mut bdata = std::fs::read(b)
+                .unwrap_or(vec![0])
+                .into_iter()
+                .map(|n| Some(n))
+                .collect();
             let comparator = Comparator::new(&mut adata, &mut bdata, a, b);
             run_comparator(&mut terminal, comparator, tick_rate)
         }
         (None, Some(_)) => unreachable!(),
     };
-
-    // let mut data = match &args.file {
-    //     Some(f) => std::fs::read(f).unwrap_or(vec![0]),
-    //     None => vec![0],
-    // };
-
-    // let viewer = App::new(&mut data, args.file.as_deref());
-    // let res = run_viewer(&mut terminal, app, tick_rate);
 
     disable_raw_mode()?;
     execute!(

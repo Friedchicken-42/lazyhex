@@ -86,7 +86,7 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
 
     if comparator.deleted > 0 {
         let deleted = Span::styled(
-            format!("+{}", comparator.deleted),
+            format!("-{}", comparator.deleted),
             Style::default().bg(Color::Red),
         );
         header.push(deleted);
@@ -95,7 +95,7 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
 
     if comparator.replaced > 0 {
         let replaced = Span::styled(
-            format!("+{}", comparator.replaced),
+            format!("~{}", comparator.replaced),
             Style::default().bg(Color::Yellow).fg(Color::Black),
         );
         header.push(replaced);
@@ -104,9 +104,9 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
 
     header.insert(
         0,
-        Span::from(format!(" Comparing {file_old:?} and {file_new:?} ")),
+        Span::from(format!(" Comparing {file_old:?} and {file_new:?}")),
     );
-    header.insert(1, Span::raw(" | "));
+    header.insert(1, Span::raw("  |  "));
 
     let header = Paragraph::new(Line::from(header))
         .block(Block::default().title("Lazyhex").borders(Borders::ALL));

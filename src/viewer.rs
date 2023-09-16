@@ -23,7 +23,7 @@ impl Highlight {
 }
 
 pub struct Viewer<'a> {
-    pub data: &'a mut Vec<u8>,
+    pub data: &'a mut Vec<Option<u8>>,
     pub selection: Highlight,
     pub filename: Option<&'a str>,
     pub mode: Mode,
@@ -39,7 +39,7 @@ const COLORS: [(Color, Color); 4] = [
 ];
 
 impl<'a> Viewer<'a> {
-    pub fn new(data: &'a mut Vec<u8>, filename: Option<&'a str>) -> Self {
+    pub fn new(data: &'a mut Vec<Option<u8>>, filename: Option<&'a str>) -> Self {
         Self {
             selection: Highlight {
                 start: 0,
@@ -99,7 +99,7 @@ impl<'a> Viewer<'a> {
         }
     }
 
-    pub fn set(&mut self, value: u8) {
+    pub fn set(&mut self, value: Option<u8>) {
         self.edited = true;
         for selected in self.selection.start..=self.selection.end {
             self.data[selected] = value;
@@ -107,18 +107,18 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn flush(&mut self) {
-        if let Some(path) = &self.filename {
-            let _ = std::fs::write(path, &self.data);
-            self.edited = false;
-        }
+        // if let Some(path) = &self.filename {
+        //     let _ = std::fs::write(path, &self.data);
+        //     self.edited = false;
+        // }
     }
 
     pub fn append(&mut self) {
         self.edited = true;
         if self.selection.end + 1 < self.data.len() {
-            self.data.insert(self.selection.end + 1, 0);
+            self.data.insert(self.selection.end + 1, Some(0));
         } else {
-            self.data.push(0);
+            self.data.push(Some(0));
         }
     }
 
@@ -127,7 +127,7 @@ impl<'a> Viewer<'a> {
         self.data.drain(self.selection.start..=self.selection.end);
 
         if self.data.is_empty() {
-            self.data.push(0);
+            self.data.push(Some(0));
         }
 
         self.selection.end = std::cmp::min(self.selection.end, self.data.len() - 1);

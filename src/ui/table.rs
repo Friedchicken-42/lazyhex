@@ -19,7 +19,8 @@ pub fn table(viewer: &Viewer, height: usize) -> impl Widget {
         .map(|chunk| {
             (0..16)
                 .map(|i| match chunk.get(i) {
-                    Some(&c) if c > 32 && c != 127 => c as char,
+                    Some(&Some(c)) if c > 32 && c != 127 => c as char,
+                    Some(None) => ' ',
                     Some(_) => '.',
                     None => ' ',
                 })
