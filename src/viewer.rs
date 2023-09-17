@@ -107,10 +107,16 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn flush(&mut self) {
-        // if let Some(path) = &self.filename {
-        //     let _ = std::fs::write(path, &self.data);
-        //     self.edited = false;
-        // }
+        if let Some(path) = &self.filename {
+            let data: Vec<u8> = self
+                .data
+                .iter()
+                .filter(|d| d.is_some())
+                .map(|d| d.unwrap())
+                .collect();
+            let _ = std::fs::write(path, &data);
+            self.edited = false;
+        }
     }
 
     pub fn append(&mut self) {
