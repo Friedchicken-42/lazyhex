@@ -58,7 +58,7 @@ pub fn info(viewer: &Viewer) -> impl Widget {
 
     List::new(items).block(
         Block::default()
-            .title("Info")
+            .title(" Info ")
             .borders(Borders::ALL)
             .padding(Padding::uniform(1)),
     )

@@ -1,12 +1,12 @@
 use ratatui::{
     prelude::Alignment,
     text::Line,
-    widgets::{Block, Padding, Paragraph, Widget},
+    widgets::{Block, Padding, Paragraph},
 };
 
 use crate::viewer::Viewer;
 
-pub fn index(viewer: &Viewer, height: usize) -> impl Widget {
+pub fn index<'a>(viewer: &Viewer, height: usize) -> Paragraph<'a> {
     let skip = if viewer.selection.end / 16 > height - 1 {
         viewer.selection.end / 16 + 1 - height
     } else {

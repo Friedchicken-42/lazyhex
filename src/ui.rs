@@ -32,7 +32,7 @@ pub fn viewer_ui<B: Backend>(f: &mut Frame<B>, viewer: &mut Viewer) {
 
     let edited = if viewer.edited { "*" } else { "" };
     let header = Paragraph::new(format!("  {mode}  |  {file}{edited}"))
-        .block(Block::default().title("Lazyhex").borders(Borders::ALL));
+        .block(Block::default().title(" Lazyhex ").borders(Borders::ALL));
 
     f.render_widget(header, layout[0]);
 
@@ -58,7 +58,7 @@ pub fn viewer_ui<B: Backend>(f: &mut Frame<B>, viewer: &mut Viewer) {
     f.render_widget(hextable, main[1]);
     f.render_widget(table(viewer, height), main[2]);
 
-    let block = Block::default().borders(Borders::ALL).title("Hex");
+    let block = Block::default().borders(Borders::ALL).title(" Hex ");
     f.render_widget(block, body[0]);
 
     f.render_widget(info(viewer), body[1])
@@ -109,23 +109,45 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
     header.insert(1, Span::raw("  |  "));
 
     let header = Paragraph::new(Line::from(header))
-        .block(Block::default().title("Lazyhex").borders(Borders::ALL));
+        .block(Block::default().title(" Lazyhex ").borders(Borders::ALL));
 
     f.render_widget(header, layout[0]);
 
+    let constraints = if layout[1].width > 115 {
+        vec![Min(13), Ratio(1, 2), Ratio(1, 2)]
+    } else {
+        vec![Ratio(1, 2), Ratio(1, 2)]
+    };
+
     let body = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(vec![Ratio(1, 2), Ratio(1, 2)])
+        .constraints(constraints)
         .split(layout[1]);
 
     let height = (body[0].height - 3) as usize;
 
-    let old = hex(&comparator.viewer_old, height)
-        .block(Block::default().title(file_old).borders(Borders::ALL));
+    let old = hex(&comparator.viewer_old, height).block(
+        Block::default()
+            .title(format!(" {file_old} "))
+            .borders(Borders::ALL),
+    );
 
-    let new = hex(&comparator.viewer_new, height)
-        .block(Block::default().title(file_new).borders(Borders::ALL));
+    let new = hex(&comparator.viewer_new, height).block(
+        Block::default()
+            .title(format!(" {file_new} "))
+            .borders(Borders::ALL),
+    );
 
-    f.render_widget(old, body[0]);
-    f.render_widget(new, body[1]);
+    if layout[1].width > 115 {
+        let index = index(&comparator.viewer_new, height)
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+
+        f.render_widget(index, body[0]);
+        f.render_widget(old, body[1]);
+        f.render_widget(new, body[2]);
+    } else {
+        f.render_widget(old, body[0]);
+        f.render_widget(new, body[1]);
+    }
 }
