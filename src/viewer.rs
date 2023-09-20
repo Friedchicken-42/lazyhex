@@ -114,7 +114,8 @@ impl<'a> Viewer<'a> {
                 .filter(|d| d.is_some())
                 .map(|d| d.unwrap())
                 .collect();
-            let _ = std::fs::write(path, &data);
+
+            let _ = std::fs::write(path, data);
             self.edited = false;
         }
     }

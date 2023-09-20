@@ -1,8 +1,4 @@
-use ratatui::{
-    prelude::Alignment,
-    text::Line,
-    widgets::{Block, Padding, Paragraph},
-};
+use ratatui::{prelude::Alignment, text::Line, widgets::Paragraph};
 
 use crate::viewer::Viewer;
 
@@ -19,12 +15,5 @@ pub fn index<'a>(viewer: &Viewer, height: usize) -> Paragraph<'a> {
         .take(height)
         .collect();
 
-    Paragraph::new(indexes)
-        .block(Block::default().padding(Padding {
-            left: 1,
-            right: 1,
-            top: 2,
-            bottom: 1,
-        }))
-        .alignment(Alignment::Right)
+    Paragraph::new(indexes).alignment(Alignment::Right)
 }

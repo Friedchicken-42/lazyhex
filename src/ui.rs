@@ -54,7 +54,14 @@ pub fn viewer_ui<B: Backend>(f: &mut Frame<B>, viewer: &mut Viewer) {
             .borders(Borders::RIGHT | Borders::LEFT),
     );
 
-    f.render_widget(index(viewer, height), main[0]);
+    let index = index(viewer, height).block(Block::default().padding(Padding {
+        left: 1,
+        right: 1,
+        top: 2,
+        bottom: 1,
+    }));
+
+    f.render_widget(index, main[0]);
     f.render_widget(hextable, main[1]);
     f.render_widget(table(viewer, height), main[2]);
 
@@ -106,7 +113,9 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
         0,
         Span::from(format!(" Comparing {file_old:?} and {file_new:?}")),
     );
-    header.insert(1, Span::raw("  |  "));
+    if header.len() > 1 {
+        header.insert(1, Span::raw("  |  "));
+    }
 
     let header = Paragraph::new(Line::from(header))
         .block(Block::default().title(" Lazyhex ").borders(Borders::ALL));
@@ -141,7 +150,12 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
     if layout[1].width > 115 {
         let index = index(&comparator.viewer_new, height)
             .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
+            .block(Block::default().borders(Borders::ALL).padding(Padding {
+                left: 0,
+                right: 0,
+                top: 1,
+                bottom: 0,
+            }));
 
         f.render_widget(index, body[0]);
         f.render_widget(old, body[1]);

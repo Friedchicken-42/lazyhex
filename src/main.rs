@@ -67,6 +67,9 @@ fn run_viewer<B: Backend>(
                             viewer.mode = Mode::Normal;
                         }
                         (Mode::Normal, KeyCode::Char('g')) => viewer.selection.set(0),
+                        (Mode::Normal, KeyCode::Char('G')) => {
+                            viewer.selection.set(viewer.data.len() - 1)
+                        }
                         (Mode::Normal, KeyCode::Char('0')) => viewer
                             .selection
                             .set(viewer.selection.start - viewer.selection.start % 16),
@@ -131,6 +134,8 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -138,8 +143,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     let tick_rate = Duration::from_millis(250);
-
-    let args = Args::parse();
 
     let res = match (&args.file, &args.other) {
         (None, None) => {
