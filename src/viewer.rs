@@ -141,12 +141,21 @@ impl<'a> Viewer<'a> {
     }
 
     pub fn highlight(&mut self) {
-        let (bg, fg) = COLORS[self.highlights.len() % COLORS.len()];
+        let prev = self
+            .highlights
+            .iter()
+            .position(|h| h.start == self.selection.start && h.end == self.selection.end);
 
-        self.highlights.push(Highlight {
-            bg,
-            fg,
-            ..self.selection
-        });
+        if let Some(index) = prev {
+            self.highlights.remove(index);
+        } else {
+            let (bg, fg) = COLORS[self.highlights.len() % COLORS.len()];
+
+            self.highlights.push(Highlight {
+                bg,
+                fg,
+                ..self.selection
+            });
+        }
     }
 }
