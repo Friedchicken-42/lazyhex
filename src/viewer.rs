@@ -133,6 +133,21 @@ impl<'a> Viewer<'a> {
         self.edited = true;
         self.data.drain(self.selection.start..=self.selection.end);
 
+        let length = self.selection.end - self.selection.start + 1;
+
+        self.highlights
+            .retain(|h| h.start < self.selection.start || h.end > self.selection.end);
+
+        for highlight in self.highlights.iter_mut() {
+            if highlight.start > self.selection.start {
+                highlight.start -= length;
+            }
+
+            if highlight.end >= self.selection.end {
+                highlight.end -= length
+            }
+        }
+
         if self.data.is_empty() {
             self.data.push(Some(0));
         }

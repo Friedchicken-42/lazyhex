@@ -54,7 +54,9 @@ fn run_viewer<B: Backend>(
                             viewer.delete();
                             viewer.selection.set(viewer.selection.start);
                             viewer.mode = Mode::Normal;
-                            viewer.left();
+                            if viewer.selection.end == viewer.data.len() {
+                                viewer.left();
+                            }
                         }
                         (Mode::Normal, KeyCode::Char('o')) => {
                             viewer.append();
