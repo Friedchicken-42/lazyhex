@@ -14,6 +14,9 @@ use table::table;
 mod info;
 use info::info;
 
+mod difference;
+use difference::difference;
+
 use ratatui::{layout::Constraint::*, prelude::*, widgets::*};
 
 pub fn viewer_ui<B: Backend>(f: &mut Frame<B>, viewer: &mut Viewer) {
@@ -122,16 +125,24 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
 
     f.render_widget(header, layout[0]);
 
-    let constraints = if layout[1].width > 115 {
-        vec![Min(13), Ratio(1, 2), Ratio(1, 2)]
+    let width = layout[1].width;
+    let constraints = if width > 150 {
+        vec![Length(13), Length(width - 43), Length(30)]
+    } else if width > 115 {
+        vec![Length(13), Length(width - 13)]
     } else {
-        vec![Ratio(1, 2), Ratio(1, 2)]
+        vec![Length(width)]
     };
 
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(constraints)
         .split(layout[1]);
+
+    let comparing = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Ratio(1, 2), Ratio(1, 2)])
+        .split(body[if width > 115 { 1 } else { 0 }]);
 
     let height = (body[0].height - 3) as usize;
 
@@ -147,7 +158,7 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
             .borders(Borders::ALL),
     );
 
-    if layout[1].width > 115 {
+    if width > 115 {
         let index = index(&comparator.viewer_new, height)
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL).padding(Padding {
@@ -158,10 +169,18 @@ pub fn comparator_ui<B: Backend>(f: &mut Frame<B>, comparator: &mut Comparator) 
             }));
 
         f.render_widget(index, body[0]);
-        f.render_widget(old, body[1]);
-        f.render_widget(new, body[2]);
-    } else {
-        f.render_widget(old, body[0]);
-        f.render_widget(new, body[1]);
     }
+
+    if width > 150 {
+        let diff = difference(&comparator).block(
+            Block::default()
+                .title(" Difference ")
+                .borders(Borders::ALL)
+                .padding(Padding::horizontal(1)),
+        );
+        f.render_widget(diff, body[2]);
+    }
+
+    f.render_widget(old, comparing[0]);
+    f.render_widget(new, comparing[1]);
 }
