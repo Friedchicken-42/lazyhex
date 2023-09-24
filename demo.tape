@@ -1,8 +1,8 @@
 Output demo.gif
 
 Set FontSize 16
-Set Width 1400
-Set Height 700
+Set Width 2000
+Set Height 1000
 Set Shell zsh
 
 Type "lazyhex Cargo.lock"
@@ -22,7 +22,10 @@ Type@400ms "k0"
 Sleep 5s
 
 Type "q"
+
 Type "lazyhex a.txt b.txt"
 Sleep 2s
 Enter
+Sleep 2s
+Type@200ms "lll"
 Sleep 5s
