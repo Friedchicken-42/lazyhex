@@ -1,4 +1,4 @@
-use ratatui::{prelude::Alignment, text::Line, widgets::Paragraph};
+use ratatui::{prelude::Alignment, style::Style, text::Line, widgets::Paragraph};
 
 use crate::viewer::Viewer;
 
@@ -10,7 +10,14 @@ pub fn index<'a>(viewer: &Viewer, height: usize) -> Paragraph<'a> {
     };
 
     let indexes: Vec<_> = (0..viewer.data.chunks(16).len())
-        .map(|i| Line::from(format!("0x{i:05X}0")))
+        .map(|i| {
+            let id = format!("0x{i:05X}0");
+            if i >= viewer.selection.start / 16 && i <= viewer.selection.end / 16 {
+                Line::styled(id, Style::default().bg(ratatui::style::Color::DarkGray))
+            } else {
+                Line::from(id)
+            }
+        })
         .skip(skip)
         .take(height)
         .collect();

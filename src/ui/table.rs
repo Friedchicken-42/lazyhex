@@ -1,6 +1,7 @@
 use ratatui::{
     prelude::Alignment,
-    text::Line,
+    style::{Color, Style},
+    text::{Line, Span},
     widgets::{Block, Padding, Paragraph, Widget},
 };
 
@@ -16,15 +17,24 @@ pub fn table(viewer: &Viewer, height: usize) -> impl Widget {
     let table: Vec<_> = viewer
         .data
         .chunks(16)
-        .map(|chunk| {
+        .enumerate()
+        .map(|(i, chunk)| {
             (0..16)
                 .map(|i| match chunk.get(i) {
-                    Some(&Some(c)) if c > 32 && c != 127 => c as char,
+                    Some(&Some(c)) if c > 32 && c < 127 => c as char,
                     Some(None) => ' ',
                     Some(_) => '.',
                     None => ' ',
                 })
-                .collect::<String>()
+                .enumerate()
+                .map(|(j, c)| {
+                    if i * 16 + j >= viewer.selection.start && i * 16 + j <= viewer.selection.end {
+                        Span::styled(c.to_string(), Style::default().bg(Color::DarkGray))
+                    } else {
+                        Span::raw(c.to_string())
+                    }
+                })
+                .collect::<Vec<_>>()
         })
         .map(|s| Line::from(s))
         .skip(skip)
