@@ -75,6 +75,7 @@ fn run_viewer<B: Backend>(
                         (Mode::Normal, KeyCode::Char('0')) => viewer
                             .selection
                             .set(viewer.selection.start - viewer.selection.start % 16),
+                        (Mode::Visual, KeyCode::Char('y')) => viewer.yank(),
                         (_, KeyCode::Esc) => viewer.mode = Mode::Normal,
                         (Mode::Insert, KeyCode::Char(c)) => match (input, c.to_digit(16)) {
                             (None, Some(b)) => input = Some(b),

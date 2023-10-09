@@ -1,3 +1,4 @@
+use arboard::Clipboard;
 use ratatui::style::Color;
 
 #[derive(PartialEq)]
@@ -29,6 +30,7 @@ pub struct Viewer<'a> {
     pub mode: Mode,
     pub highlights: Vec<Highlight>,
     pub edited: bool,
+    clipboard: Clipboard,
 }
 
 const COLORS: [(Color, Color); 4] = [
@@ -52,6 +54,7 @@ impl<'a> Viewer<'a> {
             mode: Mode::Normal,
             highlights: vec![],
             edited: false,
+            clipboard: Clipboard::new().unwrap(),
         }
     }
 
@@ -172,5 +175,19 @@ impl<'a> Viewer<'a> {
                 ..self.selection
             });
         }
+    }
+
+    pub fn yank(&mut self) {
+        println!("adsf");
+        let text: String = self.data[self.selection.start..=self.selection.end]
+            .iter()
+            .filter(|d| d.is_some())
+            .map(|d| d.unwrap())
+            .map(|d| d as char)
+            .collect();
+
+        self.clipboard.set_text(text).unwrap();
+
+        println!("{}", self.clipboard.get_text().unwrap());
     }
 }
