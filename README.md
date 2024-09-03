@@ -1,7 +1,6 @@
 <div align="center">
   
 # Lazyhex
-[lazygit](https://github.com/jesseduffield/lazygit) as a hex editor
-![lazyhex demo](./demo.gif) 
+Simple hex viewer/editor with custom highlights support
 
 </div>

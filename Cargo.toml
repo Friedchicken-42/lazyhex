@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-arboard = { version = "3.2.1", default-features = false }
+anyhow = "1.0.86"
 clap = { version = "4.4.2", features = ["derive"] }
-crossterm = "0.27.0"
-ratatui = { version = "0.23.0", features = ["all-widgets"]}
-similar = "2.2.1"
+crossterm = "0.28.1"
+mlua = { version = "0.9.9", features = [ "lua54" ] }
+num-traits = "0.2.19"
+ratatui = { version = "0.28.1", features = ["all-widgets"]}
