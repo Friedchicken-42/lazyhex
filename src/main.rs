@@ -295,13 +295,10 @@ fn ui(f: &mut Frame, app: &mut App) {
     let width = f.area().width;
     let height = f.area().height;
 
-    // Constraint::Length(9),
-    // Constraint::Length(53),
-    // Constraint::Length(16),
     const INDEX: u16 = 9;
     const HEX: u16 = 53;
     const TEXT: u16 = 16;
-    const MAIN: u16 = INDEX + HEX + TEXT;
+    const MAIN: u16 = INDEX + HEX + TEXT + 4;
     const RIGHT: u16 = 38;
 
     let constraints = if width > MAIN + RIGHT {
