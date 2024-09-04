@@ -13,7 +13,6 @@ use config::Endian;
 use mlua::Lua;
 use ratatui::{
     backend::{Backend, CrosstermBackend},
-    buffer::Buffer,
     crossterm::{
         event::{self, Event, KeyCode, KeyModifiers},
         execute,
@@ -21,12 +20,18 @@ use ratatui::{
     },
     layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style},
-    text::Line,
-    widgets::{Block, Borders, Padding, Widget},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Padding},
     Frame, Terminal,
 };
 
 use anyhow::Result;
+
+const INDEX: u16 = 9;
+const HEX: u16 = (2 + 1) * 16 + 1;
+const TEXT: u16 = 16;
+const MAIN: u16 = INDEX + HEX + TEXT + 8;
+const RIGHT: u16 = 38;
 
 struct TerminalManager {
     terminal: Terminal<CrosstermBackend<Stdout>>,
@@ -79,227 +84,211 @@ fn get_style(highlights: &[Highlight], area: Range<usize>, selection: &Selection
     }
 }
 
-struct IndexView<'a> {
-    app: &'a App<'a>,
+fn ui_index(f: &mut Frame, app: &App, area: Rect) {
+    let current = app.single_selection() / 16;
+
+    let range = app.visible_range();
+    let start = range.start / 16;
+    let end = (start + app.height as usize).min(range.end / 16 + 1);
+
+    let mut lines = Vec::with_capacity(end - start + 1);
+    lines.push(Line::raw(""));
+
+    for index in start..end {
+        let hex = format!("0x{index:05X}0");
+
+        let style = if current == index {
+            Style::default().bg(Color::White).fg(Color::Black)
+        } else {
+            Style::default()
+        };
+
+        lines.push(Line::styled(hex, style));
+    }
+
+    let widget = Text::from(lines);
+    f.render_widget(widget, area);
 }
 
-impl<'a> Widget for IndexView<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let current = self.app.single_selection() / 16;
+fn ui_hex(f: &mut Frame, app: &App, area: Rect) {
+    let range = app.visible_range();
+    let offset = range.start;
+    let data = &app.data[range];
+    let selection = &app.selection;
 
-        let range = self.app.visible_range();
-        let start = range.start / 16;
-        let end = (start + self.app.height as usize).min(range.end / 16 + 1);
+    let mut hexes = Vec::with_capacity(app.height as usize);
 
-        for (i, index) in (start..end).enumerate() {
-            let hex = format!("0x{index:05X}0");
-            let style = if current == index {
-                Style::default().bg(Color::White).fg(Color::Black)
-            } else {
-                Style::default()
+    let header = Line::from(" 0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f");
+    hexes.push(header);
+
+    for (y, chunk) in data.chunks(16).enumerate() {
+        let mut line = Vec::with_capacity(32);
+
+        for (x, byte) in chunk.iter().enumerate() {
+            let pos = offset + y * 16 + x;
+
+            if x == 8 {
+                line.push(Span::raw("  "));
+            } else if x != 0 {
+                let style = get_style(&app.highlights, (pos - 1)..pos, selection);
+                line.push(Span::styled(" ", style));
+            }
+
+            let hex = format!("{byte:02x}");
+            let style = get_style(&app.highlights, pos..pos, selection);
+            line.push(Span::styled(hex, style));
+        }
+
+        hexes.push(Line::from(line));
+    }
+
+    let widget = Text::from(hexes);
+    f.render_widget(widget, area);
+}
+
+fn ui_text(f: &mut Frame, app: &App, area: Rect) {
+    let range = app.visible_range();
+    let offset = range.start;
+    let data = &app.data[range];
+
+    let mut lines = Vec::with_capacity(app.height as usize);
+    lines.push(Line::raw(""));
+
+    for (y, chunk) in data.chunks(16).enumerate() {
+        let mut line = Vec::with_capacity(8);
+
+        for (x, byte) in chunk.iter().enumerate() {
+            let pos = offset + y * 16 + x;
+
+            let string = match byte {
+                &c if c > 32 && c < 127 => format!("{}", c as char),
+                _ => String::from("."),
             };
-            buf.set_string(area.x, area.y + i as u16 + 1, hex, style);
+
+            let style = get_style(&app.highlights, pos..pos, &app.selection);
+            line.push(Span::styled(string, style));
+        }
+
+        lines.push(Line::from(line));
+    }
+
+    let widget = Text::from(lines);
+    f.render_widget(widget, area);
+}
+
+fn ui_info_endian(f: &mut Frame, app: &App, area: Rect) {
+    let (selected, not_selected) = (
+        Style::default().bg(Color::White).fg(Color::Black),
+        Style::default().fg(Color::White),
+    );
+
+    let (big, little) = match app.config.endian {
+        Endian::Big => (selected, not_selected),
+        Endian::Little => (not_selected, selected),
+    };
+
+    // TODO: mabye center this?
+    let widget = Line::from(vec![
+        Span::styled(" Big ", big),
+        Span::styled(" Little ", little),
+    ]);
+
+    f.render_widget(widget, area);
+}
+
+fn ui_info(f: &mut Frame, app: &mut App, area: Rect) {
+    let data = &app.data;
+    let config = &app.config;
+    let current = app.single_selection();
+
+    let byte = data[current];
+
+    let [endian, info] = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(area);
+
+    ui_info_endian(f, app, endian);
+
+    // TODO: find a way to remove `N` and use `std::mem::size_of::<T>()`
+    fn read<T: FromBytes<Bytes = [u8; N]>, const N: usize>(data: &[u8], endian: Endian) -> T {
+        let mut bytes = [0u8; N];
+        let length = N.min(data.len());
+        bytes[..length].copy_from_slice(&data[..length]);
+
+        match endian {
+            Endian::Little => T::from_le_bytes(&bytes),
+            Endian::Big => T::from_be_bytes(&bytes),
         }
     }
+
+    let short = read::<u16, 2>(&data[current..], config.endian);
+    let int = read::<u32, 4>(&data[current..], config.endian);
+    let long = read::<u64, 8>(&data[current..], config.endian);
+    let float = read::<f32, 4>(&data[current..], config.endian);
+    let double = read::<f64, 8>(&data[current..], config.endian);
+
+    let mut string = match &app.selection {
+        Selection::Single(_) => String::from(byte as char),
+        Selection::Visual { range, .. } => match std::str::from_utf8(&data[range.clone()]) {
+            Ok(s) => s.to_string(),
+            Err(_) => String::from("* not utf8 *"),
+        },
+    };
+    string.truncate(20);
+
+    let table = [
+        ("hex", format!("0x{byte:02x}")),
+        ("binary", format!("0b{byte:08b}")),
+        ("octal", format!("0o{byte:o}")),
+        ("u8", format!("{}", byte)),
+        ("i8", format!("{}", byte as i8)),
+        ("char", format!("{:?}", byte as char)),
+        ("u16", format!("{}", short)),
+        ("i16", format!("{}", short as i16)),
+        ("u32", format!("{}", int)),
+        ("i32", format!("{}", int as i32)),
+        ("u64", format!("{}", long)),
+        ("i64", format!("{}", long as i64)),
+        ("f32", format!("{:.5e}", float)),
+        ("f64", format!("{:.5e}", double)),
+        ("string", format!("{string:?}")),
+    ];
+
+    let lines = table
+        .into_iter()
+        .map(|(name, value)| Line::from(format!("{name:<8}: {value}")))
+        .collect::<Vec<_>>();
+
+    let widget = Text::from(lines);
+    f.render_widget(widget, info);
 }
 
-struct HexView<'a> {
-    app: &'a App<'a>,
-}
+fn ui_highlights(f: &mut Frame, app: &mut App, area: Rect) {
+    let current = app.single_selection();
 
-impl<'a> Widget for HexView<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let range = self.app.visible_range();
-        let offset = range.start;
-        let data = &self.app.data[range];
-        let selection = &self.app.selection;
+    let lines = app
+        .highlights
+        .iter()
+        .filter(|hl| current >= hl.start && current < hl.end)
+        .map(|hl| {
+            let mut style = Style::default();
 
-        for (y, chunk) in data.chunks(16).enumerate() {
-            let mut x = 2;
-
-            for (i, byte) in chunk.iter().enumerate() {
-                let pos = offset + y * 16 + i;
-                let y = y as u16 + 1;
-
-                if i == 8 {
-                    buf.set_string(area.x + x, area.y + y, "  ", Style::default());
-                    x += 2;
-                } else if i != 0 {
-                    let style = get_style(&self.app.highlights, (pos - 1)..pos, selection);
-                    buf.set_string(area.x + x, area.y + y, " ", style);
-                    x += 1;
-                }
-
-                let hex = format!("{byte:02x}");
-                let style = get_style(&self.app.highlights, pos..pos, selection);
-
-                buf.set_string(area.x + x, area.y + y, hex, style);
-
-                x += 2;
+            if let Some(bg) = hl.bg {
+                style = style.bg(bg);
             }
-        }
-    }
-}
-
-struct TextView<'a> {
-    app: &'a App<'a>,
-}
-
-impl<'a> Widget for TextView<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let range = self.app.visible_range();
-        let offset = range.start;
-        let data = &self.app.data[range];
-
-        for (y, chunk) in data.chunks(16).enumerate() {
-            for (x, byte) in chunk.iter().enumerate() {
-                let pos = offset + y * 16 + x;
-                let y = y as u16 + 1;
-
-                let string = match byte {
-                    &c if c > 32 && c < 127 => format!("{}", c as char),
-                    _ => String::from("."),
-                };
-
-                let style = get_style(&self.app.highlights, pos..pos, &self.app.selection);
-                buf.set_string(area.x + x as u16, area.y + y, string, style);
+            if let Some(fg) = hl.fg {
+                style = style.fg(fg);
             }
-        }
-    }
-}
 
-struct InfoView<'a> {
-    app: &'a App<'a>,
-}
+            Line::styled(&hl.text, style)
+        })
+        .collect::<Vec<_>>();
 
-impl<'a> Widget for InfoView<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let data = &self.app.data;
-        let config = &self.app.config;
-
-        let current = self.app.single_selection();
-
-        let byte = data[current];
-
-        let (big, little) = match config.endian {
-            Endian::Big => (
-                Style::default().bg(Color::White).fg(Color::Black),
-                Style::default().fg(Color::White),
-            ),
-            Endian::Little => (
-                Style::default().fg(Color::White),
-                Style::default().bg(Color::White).fg(Color::Black),
-            ),
-        };
-
-        buf.set_string(area.x + 2, area.y, " Big ", big);
-        buf.set_string(area.x + 7, area.y, " Little ", little);
-
-        // TODO: find a way to remove `N` and use `std::mem::size_of::<T>()`
-        fn read<T: FromBytes<Bytes = [u8; N]>, const N: usize>(data: &[u8], endian: Endian) -> T {
-            let mut bytes = [0u8; N];
-            let length = N.min(data.len());
-            bytes[..length].copy_from_slice(&data[..length]);
-
-            match endian {
-                Endian::Little => T::from_le_bytes(&bytes),
-                Endian::Big => T::from_be_bytes(&bytes),
-            }
-        }
-
-        let short = read::<u16, 2>(&data[current..], config.endian);
-        let int = read::<u32, 4>(&data[current..], config.endian);
-        let long = read::<u64, 8>(&data[current..], config.endian);
-        let float = read::<f32, 4>(&data[current..], config.endian);
-        let double = read::<f64, 8>(&data[current..], config.endian);
-
-        let mut string = match &self.app.selection {
-            Selection::Single(_) => String::from(byte as char),
-            Selection::Visual { range, .. } => match std::str::from_utf8(&data[range.clone()]) {
-                Ok(s) => s.to_string(),
-                Err(_) => String::from("* not utf8 *"),
-            },
-        };
-        string.truncate(20);
-
-        let info = [
-            ("hex", format!("0x{byte:02x}")),
-            ("binary", format!("0b{byte:08b}")),
-            ("octal", format!("0o{byte:o}")),
-            ("u8", format!("{}", byte)),
-            ("i8", format!("{}", byte as i8)),
-            ("char", format!("{:?}", byte as char)),
-            ("u16", format!("{}", short)),
-            ("i16", format!("{}", short as i16)),
-            ("u32", format!("{}", int)),
-            ("i32", format!("{}", int as i32)),
-            ("u64", format!("{}", long)),
-            ("i64", format!("{}", long as i64)),
-            ("f32", format!("{:.5e}", float)),
-            ("f64", format!("{:.5e}", double)),
-            ("string", format!("{string:?}")),
-        ];
-
-        let mut y = 2;
-        for (name, value) in info {
-            let style = Style::default();
-            buf.set_string(area.x, area.y + y, format!("{name}:"), style);
-            buf.set_string(area.x + 8, area.y + y, value, style);
-            y += 1;
-        }
-    }
-}
-
-struct HighlightsView<'a> {
-    app: &'a App<'a>,
-}
-
-impl<'a> Widget for HighlightsView<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let current = self.app.single_selection();
-        let mut y = 0;
-
-        for highlight in &self.app.highlights {
-            if current >= highlight.start && current < highlight.end {
-                let mut style = Style::default();
-                if let Some(bg) = highlight.bg {
-                    style = style.bg(bg);
-                }
-                if let Some(fg) = highlight.fg {
-                    style = style.fg(fg);
-                }
-                buf.set_string(area.x, area.y + y, &highlight.text, style);
-
-                y += 1;
-            }
-        }
-    }
+    let widget = Text::from(lines);
+    f.render_widget(widget, area);
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
     let width = f.area().width;
     let height = f.area().height;
-
-    const INDEX: u16 = 9;
-    const HEX: u16 = 53;
-    const TEXT: u16 = 16;
-    const MAIN: u16 = INDEX + HEX + TEXT + 4;
-    const RIGHT: u16 = 38;
 
     let constraints = if width > MAIN + RIGHT {
         vec![Constraint::Length(MAIN), Constraint::Length(RIGHT)]
@@ -320,27 +309,24 @@ fn ui(f: &mut Frame, app: &mut App) {
 
         let rights = Layout::vertical(right).split(main[1]);
 
-        let info = InfoView { app };
-
-        let info_block = Block::default()
+        let block = Block::default()
             .borders(Borders::ALL)
             .padding(Padding::uniform(1))
             .title(" Info ");
-        let inner_info_block = info_block.inner(rights[0]);
+        let area = block.inner(rights[0]);
 
-        f.render_widget(info_block, rights[0]);
-        f.render_widget(info, inner_info_block);
+        ui_info(f, app, area);
+        f.render_widget(block, rights[0]);
 
         if height > 20 + 20 {
-            let highlights = HighlightsView { app };
-            let high_block = Block::default()
+            let block = Block::default()
                 .borders(Borders::ALL)
                 .padding(Padding::uniform(1))
                 .title(" Highlights ");
-            let high_info_block = high_block.inner(rights[1]);
+            let area = block.inner(rights[1]);
 
-            f.render_widget(high_block, rights[1]);
-            f.render_widget(highlights, high_info_block);
+            ui_highlights(f, app, area);
+            f.render_widget(block, rights[1]);
         }
     }
 
@@ -351,25 +337,19 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     let inner = block.inner(main[0]);
 
-    let rects = Layout::horizontal([
+    let [index, hex, text] = Layout::horizontal([
         Constraint::Length(INDEX),
         Constraint::Length(HEX),
         Constraint::Length(TEXT),
     ])
-    .split(inner);
+    .flex(Flex::SpaceBetween)
+    .areas(inner);
 
     app.height = inner.height - 1;
 
-    let indexview = IndexView { app };
-    let hexview = HexView { app };
-    let textview = TextView { app };
-
-    let header = Line::from("   0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f");
-    f.render_widget(header, rects[1]);
-
-    f.render_widget(indexview, rects[0]);
-    f.render_widget(hexview, rects[1]);
-    f.render_widget(textview, rects[2]);
+    ui_index(f, app, index);
+    ui_hex(f, app, hex);
+    ui_text(f, app, text);
 
     f.render_widget(block, main[0]);
 }
