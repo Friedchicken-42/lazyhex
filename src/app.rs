@@ -302,16 +302,26 @@ impl<'lua> App<'lua> {
 
     pub fn delete(&mut self) {
         let range = match &self.selection {
-            Selection::Single(idx) => {
-                self.data.remove(*idx);
-                (*idx)..(*idx + 1)
-            }
-            Selection::Visual { range, .. } => {
-                self.data.drain(range.clone());
-                range.clone()
-            }
+            Selection::Single(idx) => (*idx)..(*idx + 1),
+            Selection::Visual { range, .. } => range.clone(),
         };
 
-        self.move_highlights(range, true);
+        self.data.drain(range.clone());
+
+        self.move_highlights(range.clone(), true);
+
+        let current = match &self.selection {
+            Selection::Single(current) => *current,
+            Selection::Visual { range, .. } => range.start,
+        };
+
+        if self.data.is_empty() {
+            self.data.push(0);
+        }
+
+        let current = current.min(self.data.len() - 1);
+
+        self.selection = Selection::Single(current);
+        self.set_mode(Mode::Normal);
     }
 }
