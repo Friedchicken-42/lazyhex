@@ -184,6 +184,27 @@ impl<'lua> App<'lua> {
         })
     }
 
+    pub fn position(&mut self, pos: usize) {
+        let pos = pos.min(self.data.len() - 1);
+
+        self.selection = match &self.selection {
+            Selection::Single(_) => Selection::Single(pos),
+            Selection::Visual {
+                current,
+                range,
+                center,
+            } => {
+                let start = (*center).min(pos);
+                let end = (*center).max(pos) + 1;
+                Selection::Visual {
+                    current: pos,
+                    range: start..end,
+                    center: *center,
+                }
+            }
+        };
+    }
+
     pub fn r#move(&mut self, increment: i32) {
         self.selection = match &self.selection {
             Selection::Single(current) => {

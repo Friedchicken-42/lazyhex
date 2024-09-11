@@ -413,7 +413,10 @@ fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                 {
                     app.r#move(-app.config.page)
                 }
-                (Mode::Normal, KeyCode::Char('g')) => app.top(),
+                (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.position(0),
+                (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
+                    app.position(app.data.len() - 1)
+                }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.r#move(-1),
                 (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.r#move(16),
                 (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.r#move(-16),
