@@ -146,7 +146,7 @@ fn load_highlights(data: &[u8], lua: &Lua, callback: &Function) -> Result<Vec<Hi
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Mode {
     Normal,
     Visual,

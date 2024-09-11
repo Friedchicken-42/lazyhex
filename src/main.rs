@@ -21,7 +21,7 @@ use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Padding},
+    widgets::{Block, Borders, Padding, Paragraph},
     Frame, Terminal,
 };
 
@@ -286,9 +286,52 @@ fn ui_highlights(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(widget, area);
 }
 
-fn ui(f: &mut Frame, app: &mut App) {
+fn ui_header(f: &mut Frame, app: &mut App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .padding(Padding::horizontal(2))
+        .title(" Lazyhex ");
+
+    let mode = format!("{:?}", app.mode);
+    let text = Paragraph::new(mode).block(block);
+
+    f.render_widget(text, area);
+}
+
+fn ui_right(f: &mut Frame, app: &mut App, area: Rect) {
+    let height = area.height;
+
+    let right = if height > 20 + 20 {
+        vec![Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]
+    } else {
+        vec![Constraint::Ratio(1, 1)]
+    };
+
+    let rights = Layout::vertical(right).split(area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .padding(Padding::uniform(1))
+        .title(" Info ");
+    let area = block.inner(rights[0]);
+
+    ui_info(f, app, area);
+    f.render_widget(block, rights[0]);
+
+    if height > 40 {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .padding(Padding::uniform(1))
+            .title(" Highlights ");
+        let area = block.inner(rights[1]);
+
+        ui_highlights(f, app, area);
+        f.render_widget(block, rights[1]);
+    }
+}
+
+fn ui_primary(f: &mut Frame, app: &mut App, area: Rect) {
     let width = f.area().width;
-    let height = f.area().height;
 
     let constraints = if width > MAIN + RIGHT {
         vec![Constraint::Length(MAIN), Constraint::Length(RIGHT)]
@@ -296,43 +339,15 @@ fn ui(f: &mut Frame, app: &mut App) {
         vec![Constraint::Length(MAIN)]
     };
 
-    let main = Layout::horizontal(constraints)
-        .flex(Flex::Center)
-        .split(f.area());
+    let main = Layout::horizontal(constraints).split(area);
 
     if width > MAIN + RIGHT {
-        let right = if height > 20 + 20 {
-            vec![Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]
-        } else {
-            vec![Constraint::Ratio(1, 1)]
-        };
-
-        let rights = Layout::vertical(right).split(main[1]);
-
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .padding(Padding::uniform(1))
-            .title(" Info ");
-        let area = block.inner(rights[0]);
-
-        ui_info(f, app, area);
-        f.render_widget(block, rights[0]);
-
-        if height > 20 + 20 {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .padding(Padding::uniform(1))
-                .title(" Highlights ");
-            let area = block.inner(rights[1]);
-
-            ui_highlights(f, app, area);
-            f.render_widget(block, rights[1]);
-        }
+        ui_right(f, app, main[1]);
     }
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .padding(Padding::new(1, 1, 0, 0))
+        .padding(Padding::horizontal(1))
         .title(" Hex ");
 
     let inner = block.inner(main[0]);
@@ -352,6 +367,26 @@ fn ui(f: &mut Frame, app: &mut App) {
     ui_text(f, app, text);
 
     f.render_widget(block, main[0]);
+}
+
+fn ui(f: &mut Frame, app: &mut App) {
+    let width = f.area().width;
+
+    let size = if width > MAIN + RIGHT {
+        MAIN + RIGHT
+    } else {
+        MAIN
+    };
+
+    let [center] = Layout::horizontal([Constraint::Length(size)])
+        .flex(Flex::Center)
+        .areas(f.area());
+
+    let [header, primary] =
+        Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(center);
+
+    ui_header(f, app, header);
+    ui_primary(f, app, primary);
 }
 
 fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
@@ -378,6 +413,7 @@ fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                 {
                     app.r#move(-app.config.page)
                 }
+                (Mode::Normal, KeyCode::Char('g')) => app.top(),
                 (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.r#move(-1),
                 (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.r#move(16),
                 (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.r#move(-16),
