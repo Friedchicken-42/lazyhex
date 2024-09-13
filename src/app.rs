@@ -1,4 +1,4 @@
-use std::{ops::Range, str::FromStr};
+use std::{ops::Range, path::PathBuf, str::FromStr};
 
 use anyhow::Result;
 use mlua::{FromLua, Function, Lua, Table};
@@ -154,33 +154,47 @@ pub enum Mode {
     Insert,
 }
 
+#[derive(PartialEq)]
+pub enum Popup {
+    None,
+    Filename(String),
+}
+
 pub struct App<'lua> {
     pub data: Vec<u8>,
+    pub path: Option<PathBuf>,
     pub config: Config<'lua>,
-    pub height: u16,
     pub selection: Selection,
     pub highlights: Vec<Highlight>,
+
+    pub height: u16,
     pub mode: Mode,
+    pub popup: Popup,
+    pub input: Option<u32>,
 }
 
 impl<'lua> App<'lua> {
     pub fn new(args: Args, height: u16, lua: &'lua Lua) -> Result<Self> {
         let config = Config::load(lua)?;
 
-        let data = match args.file {
-            Some(path) => std::fs::read(&path)?,
-            None => vec![0],
+        let (data, path) = match args.file {
+            Some(path) => (std::fs::read(&path)?, Some(PathBuf::from(path))),
+            None => (vec![0], None),
         };
 
         let highlights = load_highlights(&data, lua, &config.highlight)?;
 
         Ok(Self {
             data,
+            path,
             config,
-            height: height - 4,
             selection: Selection::Single(0),
             highlights,
+
+            height: height - 4,
             mode: Mode::Normal,
+            popup: Popup::None,
+            input: None,
         })
     }
 
@@ -189,11 +203,7 @@ impl<'lua> App<'lua> {
 
         self.selection = match &self.selection {
             Selection::Single(_) => Selection::Single(pos),
-            Selection::Visual {
-                current,
-                range,
-                center,
-            } => {
+            Selection::Visual { center, .. } => {
                 let start = (*center).min(pos);
                 let end = (*center).max(pos) + 1;
                 Selection::Visual {
@@ -344,5 +354,12 @@ impl<'lua> App<'lua> {
 
         self.selection = Selection::Single(current);
         self.set_mode(Mode::Normal);
+    }
+
+    pub fn write(&mut self, path: PathBuf) {
+        // TODO: popoup on error
+        let _ = std::fs::write(&path, &self.data);
+
+        self.path = Some(path);
     }
 }

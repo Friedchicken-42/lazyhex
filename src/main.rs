@@ -5,9 +5,11 @@ use num_traits::ops::bytes::FromBytes;
 use std::{
     io::{stdout, Stdout},
     ops::Range,
+    path::PathBuf,
+    str::FromStr,
 };
 
-use app::{App, Highlight, Mode, Selection};
+use app::{App, Highlight, Mode, Popup, Selection};
 use clap::Parser;
 use config::Endian;
 use mlua::Lua;
@@ -21,7 +23,7 @@ use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Padding, Paragraph},
+    widgets::{Block, Borders, Clear, Padding, Paragraph},
     Frame, Terminal,
 };
 
@@ -292,10 +294,21 @@ fn ui_header(f: &mut Frame, app: &mut App, area: Rect) {
         .padding(Padding::horizontal(2))
         .title(" Lazyhex ");
 
-    let mode = format!("{:?}", app.mode);
-    let text = Paragraph::new(mode).block(block);
+    let mode = Span::from(format!("{:?}", app.mode));
+    let mut spans = vec![mode];
 
-    f.render_widget(text, area);
+    if let Some(path) = &app.path {
+        if let Some(last) = path.components().last() {
+            spans.push(Span::raw(" | "));
+            spans.push(Span::from(format!("{:?}", last.as_os_str())));
+        }
+    }
+
+    let inner = block.inner(area);
+    let text = Line::from(spans);
+
+    f.render_widget(text, inner);
+    f.render_widget(block, area);
 }
 
 fn ui_right(f: &mut Frame, app: &mut App, area: Rect) {
@@ -369,6 +382,29 @@ fn ui_primary(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(block, main[0]);
 }
 
+fn ui_popup(f: &mut Frame, app: &mut App) {
+    let [area] = Layout::horizontal([Constraint::Length(MAIN / 3)])
+        .flex(Flex::Center)
+        .areas(f.area());
+    let [area] = Layout::vertical([Constraint::Length(3)])
+        .flex(Flex::Center)
+        .areas(area);
+
+    let (title, data) = match &app.popup {
+        Popup::None => ("", ""),
+        Popup::Filename(filename) => ("Filename", filename.as_str()),
+    };
+
+    let popup = Paragraph::new(data).block(
+        Block::bordered()
+            .padding(Padding::horizontal(2))
+            .title(title),
+    );
+
+    f.render_widget(Clear, area);
+    f.render_widget(popup, area);
+}
+
 fn ui(f: &mut Frame, app: &mut App) {
     let width = f.area().width;
 
@@ -387,72 +423,118 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     ui_header(f, app, header);
     ui_primary(f, app, primary);
+
+    match app.popup {
+        Popup::None => {}
+        Popup::Filename(_) => ui_popup(f, app),
+    }
+}
+
+fn event_main(app: &mut App) -> Result<bool> {
+    #[allow(clippy::single_match)]
+    match event::read()? {
+        Event::Key(key) => match (app.mode, key.code) {
+            (_, KeyCode::Char('q')) => return Ok(true),
+            (_, KeyCode::Esc) => {
+                app.set_mode(Mode::Normal);
+                app.input = None;
+            }
+            (Mode::Normal | Mode::Visual, KeyCode::Char('d'))
+                if key.modifiers == KeyModifiers::CONTROL =>
+            {
+                app.r#move(app.config.page)
+            }
+            (Mode::Normal | Mode::Visual, KeyCode::Char('u'))
+                if key.modifiers == KeyModifiers::CONTROL =>
+            {
+                app.r#move(-app.config.page)
+            }
+            (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.position(0),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => app.position(app.data.len() - 1),
+            (Mode::Normal, KeyCode::Char('w')) => match &app.path {
+                None => {
+                    app.popup = Popup::Filename("".into());
+                }
+                Some(path) => app.write(path.clone()),
+            },
+            (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.r#move(-1),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.r#move(16),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.r#move(-16),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.r#move(1),
+            (Mode::Normal, KeyCode::Char('e')) => app.change_endian(),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.delete(),
+            (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
+            (Mode::Normal, KeyCode::Char('i')) => app.set_mode(Mode::Insert),
+            (Mode::Normal, KeyCode::Char('a')) => {
+                app.r#move(1);
+                app.set_mode(Mode::Insert);
+            }
+            (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
+                match (app.input, c.to_digit(16)) {
+                    (None, Some(hex)) => {
+                        app.set(hex as u8);
+                        app.input = Some(hex);
+                    }
+                    (Some(a), Some(b)) => {
+                        app.set((a * 16 + b) as u8);
+                        app.input = None;
+
+                        app.r#move(1);
+                        app.set_mode(Mode::Normal);
+
+                        if mode == Mode::Insert {
+                            app.set_mode(Mode::Insert);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+
+    Ok(false)
+}
+
+fn event_filename(app: &mut App) -> Result<bool> {
+    let Popup::Filename(ref mut name) = &mut app.popup else {
+        return Ok(false);
+    };
+
+    if let Event::Key(key) = event::read()? {
+        match key.code {
+            KeyCode::Enter => {
+                let path = PathBuf::from(name.clone());
+                app.write(path);
+                app.popup = Popup::None;
+            }
+            KeyCode::Esc => {
+                app.popup = Popup::None;
+            }
+            KeyCode::Char(ch) => name.push(ch),
+            KeyCode::Backspace => {
+                name.pop();
+            }
+            _ => {}
+        }
+    }
+
+    Ok(false)
 }
 
 fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
-    let mut prev = None;
-
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
-        #[allow(clippy::single_match)]
-        match event::read()? {
-            Event::Key(key) => match (app.mode, key.code) {
-                (_, KeyCode::Char('q')) => return Ok(()),
-                (_, KeyCode::Esc) => {
-                    app.set_mode(Mode::Normal);
-                    prev = None;
-                }
-                (Mode::Normal | Mode::Visual, KeyCode::Char('d'))
-                    if key.modifiers == KeyModifiers::CONTROL =>
-                {
-                    app.r#move(app.config.page)
-                }
-                (Mode::Normal | Mode::Visual, KeyCode::Char('u'))
-                    if key.modifiers == KeyModifiers::CONTROL =>
-                {
-                    app.r#move(-app.config.page)
-                }
-                (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.position(0),
-                (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
-                    app.position(app.data.len() - 1)
-                }
-                (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.r#move(-1),
-                (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.r#move(16),
-                (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.r#move(-16),
-                (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.r#move(1),
-                (Mode::Normal, KeyCode::Char('e')) => app.change_endian(),
-                (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.delete(),
-                (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
-                (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
-                (Mode::Normal, KeyCode::Char('i')) => app.set_mode(Mode::Insert),
-                (Mode::Normal, KeyCode::Char('a')) => {
-                    app.r#move(1);
-                    app.set_mode(Mode::Insert);
-                }
-                (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
-                    match (prev, c.to_digit(16)) {
-                        (None, Some(hex)) => {
-                            app.set(hex as u8);
-                            prev = Some(hex);
-                        }
-                        (Some(a), Some(b)) => {
-                            app.set((a * 16 + b) as u8);
-                            prev = None;
+        let quit = match app.popup {
+            Popup::None => event_main(&mut app)?,
+            Popup::Filename(_) => event_filename(&mut app)?,
+        };
 
-                            app.r#move(1);
-                            app.set_mode(Mode::Normal);
-
-                            if mode == Mode::Insert {
-                                app.set_mode(Mode::Insert);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
-            },
-            _ => {}
+        if quit {
+            return Ok(());
         }
     }
 }
