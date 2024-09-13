@@ -158,6 +158,8 @@ pub enum Mode {
 pub enum Popup {
     None,
     Filename(String),
+    FileErr(String),
+    Overwrite(PathBuf),
 }
 
 pub struct App<'lua> {
@@ -357,9 +359,23 @@ impl<'lua> App<'lua> {
     }
 
     pub fn write(&mut self, path: PathBuf) {
-        // TODO: popoup on error
-        let _ = std::fs::write(&path, &self.data);
+        match std::fs::write(&path, &self.data) {
+            Ok(_) => {
+                self.path = Some(path);
+                self.popup = Popup::None;
+            }
+            Err(e) => {
+                self.popup = Popup::FileErr(format!("{e:?}"));
+            }
+        }
+    }
 
-        self.path = Some(path);
+    pub fn write_ask(&mut self, path: PathBuf) {
+        match path.exists() {
+            true => {
+                self.popup = Popup::Overwrite(path);
+            }
+            false => self.write(path),
+        }
     }
 }

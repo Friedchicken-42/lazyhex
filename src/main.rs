@@ -6,7 +6,6 @@ use std::{
     io::{stdout, Stdout},
     ops::Range,
     path::PathBuf,
-    str::FromStr,
 };
 
 use app::{App, Highlight, Mode, Popup, Selection};
@@ -393,6 +392,8 @@ fn ui_popup(f: &mut Frame, app: &mut App) {
     let (title, data) = match &app.popup {
         Popup::None => ("", ""),
         Popup::Filename(filename) => ("Filename", filename.as_str()),
+        Popup::FileErr(error) => ("Error", error.as_str()),
+        Popup::Overwrite(path) => ("Overwrite? [Y/n]", path.as_os_str().to_str().unwrap()),
     };
 
     let popup = Paragraph::new(data).block(
@@ -424,9 +425,8 @@ fn ui(f: &mut Frame, app: &mut App) {
     ui_header(f, app, header);
     ui_primary(f, app, primary);
 
-    match app.popup {
-        Popup::None => {}
-        Popup::Filename(_) => ui_popup(f, app),
+    if app.popup != Popup::None {
+        ui_popup(f, app);
     }
 }
 
@@ -507,8 +507,7 @@ fn event_filename(app: &mut App) -> Result<bool> {
         match key.code {
             KeyCode::Enter => {
                 let path = PathBuf::from(name.clone());
-                app.write(path);
-                app.popup = Popup::None;
+                app.write_ask(path);
             }
             KeyCode::Esc => {
                 app.popup = Popup::None;
@@ -524,6 +523,40 @@ fn event_filename(app: &mut App) -> Result<bool> {
     Ok(false)
 }
 
+fn event_viewonly(app: &mut App) -> Result<bool> {
+    if let Event::Key(key) = event::read()? {
+        match key.code {
+            KeyCode::Enter | KeyCode::Esc => {
+                app.popup = Popup::None;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(false)
+}
+
+fn event_overwrite(app: &mut App) -> Result<bool> {
+    let Popup::Overwrite(path) = &app.popup else {
+        return Ok(false);
+    };
+
+    if let Event::Key(key) = event::read()? {
+        match key.code {
+            KeyCode::Enter | KeyCode::Char('y') => {
+                app.write(path.clone());
+                app.popup = Popup::None;
+            }
+            KeyCode::Esc | KeyCode::Char('n') => {
+                app.popup = Popup::None;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(false)
+}
+
 fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
@@ -531,6 +564,8 @@ fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
         let quit = match app.popup {
             Popup::None => event_main(&mut app)?,
             Popup::Filename(_) => event_filename(&mut app)?,
+            Popup::FileErr(_) => event_viewonly(&mut app)?,
+            Popup::Overwrite(_) => event_overwrite(&mut app)?,
         };
 
         if quit {
