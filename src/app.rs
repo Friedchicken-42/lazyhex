@@ -162,17 +162,141 @@ pub enum Popup {
     Overwrite(PathBuf),
 }
 
+pub trait Command {
+    fn execute(&mut self, app: &mut App);
+    fn undo(&self, app: &mut App);
+}
+
+pub struct Move(i32);
+
+impl Move {
+    pub fn new(offset: i32) -> Self {
+        Self(offset)
+    }
+}
+
+impl Command for Move {
+    fn execute(&mut self, app: &mut App) {
+        let increment = self.0;
+
+        app.selection = match &app.selection {
+            Selection::Single(current) => {
+                let new = *current as i32 + increment;
+                let new = 0.max(new).min(app.data.len() as i32 - 1);
+                Selection::Single(new as usize)
+            }
+            Selection::Visual {
+                current, center, ..
+            } => {
+                let new = *current as i32 + increment;
+                let new = 0.max(new).min(app.data.len() as i32 - 1) as usize;
+                let start = new.min(*center);
+                let end = (new + 1).max(*center + 1);
+                Selection::Visual {
+                    current: new,
+                    range: start..end,
+                    center: *center,
+                }
+            }
+        };
+    }
+
+    fn undo(&self, app: &mut App) {
+        let mut command = Move(-self.0);
+        command.execute(app);
+    }
+}
+
+pub struct Position {
+    new: usize,
+    old: usize,
+}
+
+impl Position {
+    pub fn new(pos: usize) -> Self {
+        Position { new: pos, old: 0 }
+    }
+}
+
+impl Command for Position {
+    fn execute(&mut self, app: &mut App) {
+        self.old = app.single_selection();
+
+        let pos = self.new;
+        let pos = pos.min(app.data.len() - 1);
+
+        app.selection = match &app.selection {
+            Selection::Single(_) => Selection::Single(pos),
+            Selection::Visual { center, .. } => {
+                let start = (*center).min(pos);
+                let end = (*center).max(pos) + 1;
+                Selection::Visual {
+                    current: pos,
+                    range: start..end,
+                    center: *center,
+                }
+            }
+        };
+    }
+
+    fn undo(&self, app: &mut App) {
+        let mut command = Self::new(self.old);
+        command.execute(app);
+    }
+}
+
+pub struct Delete(Range<usize>, Vec<u8>);
+
+impl Delete {
+    pub fn new() -> Self {
+        Self(0..0, vec![])
+    }
+}
+
+impl Command for Delete {
+    fn execute(&mut self, app: &mut App) {
+        let selection = app.selected();
+        let deleted = app.data.drain(selection.clone()).collect();
+
+        app.move_highlights(selection.clone(), true);
+
+        let current = match &app.selection {
+            Selection::Single(current) => *current,
+            Selection::Visual { range, .. } => range.start,
+        };
+
+        if app.data.is_empty() {
+            app.data.push(0);
+        }
+
+        let current = current.min(app.data.len() - 1);
+
+        app.selection = Selection::Single(current);
+        app.set_mode(Mode::Normal);
+        app.edited = true;
+
+        self.0 = selection;
+        self.1 = deleted;
+    }
+
+    fn undo(&self, app: &mut App) {
+        todo!()
+    }
+}
+
 pub struct App<'lua> {
     pub data: Vec<u8>,
     pub path: Option<PathBuf>,
     pub config: Config<'lua>,
     pub selection: Selection,
     pub highlights: Vec<Highlight>,
+    pub history: Vec<Box<dyn Command>>,
 
     pub height: u16,
     pub mode: Mode,
     pub popup: Popup,
     pub input: Option<u32>,
+    pub edited: bool,
 }
 
 impl<'lua> App<'lua> {
@@ -192,52 +316,25 @@ impl<'lua> App<'lua> {
             config,
             selection: Selection::Single(0),
             highlights,
+            history: vec![],
 
             height: height - 4,
             mode: Mode::Normal,
             popup: Popup::None,
             input: None,
+            edited: false,
         })
     }
 
-    pub fn position(&mut self, pos: usize) {
-        let pos = pos.min(self.data.len() - 1);
-
-        self.selection = match &self.selection {
-            Selection::Single(_) => Selection::Single(pos),
-            Selection::Visual { center, .. } => {
-                let start = (*center).min(pos);
-                let end = (*center).max(pos) + 1;
-                Selection::Visual {
-                    current: pos,
-                    range: start..end,
-                    center: *center,
-                }
-            }
-        };
+    pub fn execute(&mut self, mut command: impl Command + 'static) {
+        command.execute(self);
+        self.history.push(Box::new(command));
     }
 
-    pub fn r#move(&mut self, increment: i32) {
-        self.selection = match &self.selection {
-            Selection::Single(current) => {
-                let new = *current as i32 + increment;
-                let new = 0.max(new).min(self.data.len() as i32 - 1);
-                Selection::Single(new as usize)
-            }
-            Selection::Visual {
-                current, center, ..
-            } => {
-                let new = *current as i32 + increment;
-                let new = 0.max(new).min(self.data.len() as i32 - 1) as usize;
-                let start = new.min(*center);
-                let end = (new + 1).max(*center + 1);
-                Selection::Visual {
-                    current: new,
-                    range: start..end,
-                    center: *center,
-                }
-            }
-        };
+    pub fn undo(&mut self) {
+        if let Some(command) = self.history.pop() {
+            command.undo(self)
+        }
     }
 
     pub fn change_endian(&mut self) {
@@ -256,7 +353,6 @@ impl<'lua> App<'lua> {
         let max_rows = rows.saturating_sub(height).saturating_add(1);
 
         let start = current.saturating_sub(height / 2).min(max_rows);
-
         let end = ((start + height) * 16).min(self.data.len());
 
         (start * 16)..end
@@ -269,6 +365,13 @@ impl<'lua> App<'lua> {
         }
     }
 
+    pub fn selected(&self) -> Range<usize> {
+        match &self.selection {
+            Selection::Single(sel) => *sel..(*sel + 1),
+            Selection::Visual { range, .. } => range.clone(),
+        }
+    }
+
     pub fn set_mode(&mut self, mode: Mode) {
         if self.mode == mode {
             return;
@@ -278,10 +381,8 @@ impl<'lua> App<'lua> {
 
         match self.mode {
             Mode::Normal => {
-                self.selection = match self.selection {
-                    Selection::Single(s) => Selection::Single(s),
-                    Selection::Visual { current, .. } => Selection::Single(current),
-                };
+                let single = self.single_selection();
+                self.selection = Selection::Single(single);
             }
             Mode::Visual => {
                 self.selection = match &self.selection {
@@ -303,14 +404,13 @@ impl<'lua> App<'lua> {
     }
 
     pub fn set(&mut self, value: u8) {
-        match &self.selection {
-            Selection::Single(current) => self.data[*current] = value,
-            Selection::Visual { range, .. } => {
-                for x in self.data[range.clone()].iter_mut() {
-                    *x = value;
-                }
-            }
+        let selection = self.selected();
+
+        for x in self.data[selection].iter_mut() {
+            *x = value;
         }
+
+        self.edited = true;
     }
 
     fn move_highlights(&mut self, range: Range<usize>, remove: bool) {
@@ -334,28 +434,8 @@ impl<'lua> App<'lua> {
     }
 
     pub fn delete(&mut self) {
-        let range = match &self.selection {
-            Selection::Single(idx) => (*idx)..(*idx + 1),
-            Selection::Visual { range, .. } => range.clone(),
-        };
-
+        let range = self.selected();
         self.data.drain(range.clone());
-
-        self.move_highlights(range.clone(), true);
-
-        let current = match &self.selection {
-            Selection::Single(current) => *current,
-            Selection::Visual { range, .. } => range.start,
-        };
-
-        if self.data.is_empty() {
-            self.data.push(0);
-        }
-
-        let current = current.min(self.data.len() - 1);
-
-        self.selection = Selection::Single(current);
-        self.set_mode(Mode::Normal);
     }
 
     pub fn write(&mut self, path: PathBuf) {
@@ -363,6 +443,7 @@ impl<'lua> App<'lua> {
             Ok(_) => {
                 self.path = Some(path);
                 self.popup = Popup::None;
+                self.edited = false;
             }
             Err(e) => {
                 self.popup = Popup::FileErr(format!("{e:?}"));

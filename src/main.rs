@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
 };
 
-use app::{App, Highlight, Mode, Popup, Selection};
+use app::{App, Delete, Highlight, Mode, Move, Popup, Position, Selection};
 use clap::Parser;
 use config::Endian;
 use mlua::Lua;
@@ -298,8 +298,14 @@ fn ui_header(f: &mut Frame, app: &mut App, area: Rect) {
 
     if let Some(path) = &app.path {
         if let Some(last) = path.components().last() {
+            let filename = last.as_os_str().to_str().unwrap();
+
             spans.push(Span::raw(" | "));
-            spans.push(Span::from(format!("{:?}", last.as_os_str())));
+            spans.push(Span::from(filename));
+
+            if app.edited {
+                spans.push(Span::raw("*"));
+            }
         }
     }
 
@@ -442,32 +448,35 @@ fn event_main(app: &mut App) -> Result<bool> {
             (Mode::Normal | Mode::Visual, KeyCode::Char('d'))
                 if key.modifiers == KeyModifiers::CONTROL =>
             {
-                app.r#move(app.config.page)
+                app.execute(Move::new(app.config.page))
             }
             (Mode::Normal | Mode::Visual, KeyCode::Char('u'))
                 if key.modifiers == KeyModifiers::CONTROL =>
             {
-                app.r#move(-app.config.page)
+                app.execute(Move::new(-app.config.page))
             }
-            (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.position(0),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => app.position(app.data.len() - 1),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.execute(Position::new(0)),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
+                app.execute(Position::new(app.data.len() - 1))
+            }
             (Mode::Normal, KeyCode::Char('w')) => match &app.path {
                 None => {
                     app.popup = Popup::Filename("".into());
                 }
                 Some(path) => app.write(path.clone()),
             },
-            (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.r#move(-1),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.r#move(16),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.r#move(-16),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.r#move(1),
+            (Mode::Normal, KeyCode::Char('u')) => app.undo(),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.execute(Move::new(-1)),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.execute(Move::new(16)),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.execute(Move::new(-16)),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.execute(Move::new(1)),
             (Mode::Normal, KeyCode::Char('e')) => app.change_endian(),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.delete(),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.execute(Delete::new()),
             (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
             (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
             (Mode::Normal, KeyCode::Char('i')) => app.set_mode(Mode::Insert),
             (Mode::Normal, KeyCode::Char('a')) => {
-                app.r#move(1);
+                app.execute(Move::new(1));
                 app.set_mode(Mode::Insert);
             }
             (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
@@ -480,7 +489,7 @@ fn event_main(app: &mut App) -> Result<bool> {
                         app.set((a * 16 + b) as u8);
                         app.input = None;
 
-                        app.r#move(1);
+                        app.execute(Move::new(1));
                         app.set_mode(Mode::Normal);
 
                         if mode == Mode::Insert {
