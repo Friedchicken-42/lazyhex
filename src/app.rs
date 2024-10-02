@@ -156,7 +156,6 @@ pub enum Mode {
 
 #[derive(PartialEq)]
 pub enum Popup {
-    None,
     Filename(String),
     FileErr(String),
     Overwrite(PathBuf),
@@ -202,8 +201,7 @@ impl Command for Move {
     }
 
     fn undo(&self, app: &mut App) {
-        let mut command = Move(-self.0);
-        command.execute(app);
+        Move(-self.0).execute(app);
     }
 }
 
@@ -240,16 +238,15 @@ impl Command for Position {
     }
 
     fn undo(&self, app: &mut App) {
-        let mut command = Self::new(self.old);
-        command.execute(app);
+        Self::new(self.old).execute(app);
     }
 }
 
-pub struct Delete(Range<usize>, Vec<u8>);
+pub struct Delete(Vec<u8>);
 
 impl Delete {
     pub fn new() -> Self {
-        Self(0..0, vec![])
+        Self(vec![])
     }
 }
 
@@ -272,15 +269,54 @@ impl Command for Delete {
         let current = current.min(app.data.len() - 1);
 
         app.selection = Selection::Single(current);
-        app.set_mode(Mode::Normal);
+
+        app.mode = Mode::Normal;
+
         app.edited = true;
 
-        self.0 = selection;
-        self.1 = deleted;
+        self.0 = deleted;
     }
 
     fn undo(&self, app: &mut App) {
-        todo!()
+        for value in &self.0 {
+            Insert.execute(app);
+            Set::new(*value).execute(app);
+            Move(1).execute(app);
+        }
+
+        Move(-1).execute(app);
+    }
+}
+
+pub struct Set(u8);
+
+impl Set {
+    pub fn new(value: u8) -> Self {
+        Self(value)
+    }
+}
+
+impl Command for Set {
+    fn execute(&mut self, app: &mut App) {
+        let current = app.single_selection();
+        std::mem::swap(&mut app.data[current], &mut self.0);
+    }
+
+    fn undo(&self, app: &mut App) {
+        Set::new(self.0).execute(app);
+    }
+}
+
+pub struct Insert;
+
+impl Command for Insert {
+    fn execute(&mut self, app: &mut App) {
+        let current = app.single_selection();
+        app.data.insert(current, 0);
+    }
+
+    fn undo(&self, app: &mut App) {
+        Delete::new().execute(app);
     }
 }
 
@@ -294,7 +330,7 @@ pub struct App<'lua> {
 
     pub height: u16,
     pub mode: Mode,
-    pub popup: Popup,
+    pub popup: Option<Popup>,
     pub input: Option<u32>,
     pub edited: bool,
 }
@@ -320,10 +356,18 @@ impl<'lua> App<'lua> {
 
             height: height - 4,
             mode: Mode::Normal,
-            popup: Popup::None,
+            popup: None,
             input: None,
             edited: false,
         })
+    }
+
+    pub fn set_popup(&mut self, popup: Popup) {
+        self.popup = Some(popup);
+    }
+
+    pub fn clear_popup(&mut self) {
+        self.popup = None;
     }
 
     pub fn execute(&mut self, mut command: impl Command + 'static) {
@@ -372,47 +416,6 @@ impl<'lua> App<'lua> {
         }
     }
 
-    pub fn set_mode(&mut self, mode: Mode) {
-        if self.mode == mode {
-            return;
-        }
-
-        self.mode = mode;
-
-        match self.mode {
-            Mode::Normal => {
-                let single = self.single_selection();
-                self.selection = Selection::Single(single);
-            }
-            Mode::Visual => {
-                self.selection = match &self.selection {
-                    Selection::Single(current) => Selection::Visual {
-                        current: *current,
-                        center: *current,
-                        range: *current..(*current + 1),
-                    },
-                    visual => visual.clone(),
-                };
-            }
-            Mode::Replace => {}
-            Mode::Insert => {
-                let current = self.single_selection();
-                self.data.insert(current, 0);
-                self.move_highlights(current..(current + 1), false);
-            }
-        }
-    }
-
-    pub fn set(&mut self, value: u8) {
-        let selection = self.selected();
-
-        for x in self.data[selection].iter_mut() {
-            *x = value;
-        }
-
-        self.edited = true;
-    }
-
     fn move_highlights(&mut self, range: Range<usize>, remove: bool) {
         for highlight in self.highlights.iter_mut() {
             if remove {
@@ -433,20 +436,16 @@ impl<'lua> App<'lua> {
         }
     }
 
-    pub fn delete(&mut self) {
-        let range = self.selected();
-        self.data.drain(range.clone());
-    }
-
     pub fn write(&mut self, path: PathBuf) {
         match std::fs::write(&path, &self.data) {
             Ok(_) => {
                 self.path = Some(path);
-                self.popup = Popup::None;
                 self.edited = false;
+                self.clear_popup();
             }
             Err(e) => {
-                self.popup = Popup::FileErr(format!("{e:?}"));
+                let popup = Popup::FileErr(format!("{e:?}"));
+                self.set_popup(popup);
             }
         }
     }
@@ -454,7 +453,8 @@ impl<'lua> App<'lua> {
     pub fn write_ask(&mut self, path: PathBuf) {
         match path.exists() {
             true => {
-                self.popup = Popup::Overwrite(path);
+                let popup = Popup::Overwrite(path);
+                self.set_popup(popup);
             }
             false => self.write(path),
         }

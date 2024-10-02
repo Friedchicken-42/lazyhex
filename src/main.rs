@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
 };
 
-use app::{App, Delete, Highlight, Mode, Move, Popup, Position, Selection};
+use app::{App, Delete, Highlight, Insert, Mode, Move, Popup, Position, Selection, Set};
 use clap::Parser;
 use config::Endian;
 use mlua::Lua;
@@ -396,10 +396,10 @@ fn ui_popup(f: &mut Frame, app: &mut App) {
         .areas(area);
 
     let (title, data) = match &app.popup {
-        Popup::None => ("", ""),
-        Popup::Filename(filename) => ("Filename", filename.as_str()),
-        Popup::FileErr(error) => ("Error", error.as_str()),
-        Popup::Overwrite(path) => ("Overwrite? [Y/n]", path.as_os_str().to_str().unwrap()),
+        None => ("", ""),
+        Some(Popup::Filename(filename)) => ("Filename", filename.as_str()),
+        Some(Popup::FileErr(error)) => ("Error", error.as_str()),
+        Some(Popup::Overwrite(path)) => ("Overwrite? [Y/n]", path.as_os_str().to_str().unwrap()),
     };
 
     let popup = Paragraph::new(data).block(
@@ -431,7 +431,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     ui_header(f, app, header);
     ui_primary(f, app, primary);
 
-    if app.popup != Popup::None {
+    if app.popup.is_some() {
         ui_popup(f, app);
     }
 }
@@ -442,7 +442,11 @@ fn event_main(app: &mut App) -> Result<bool> {
         Event::Key(key) => match (app.mode, key.code) {
             (_, KeyCode::Char('q')) => return Ok(true),
             (_, KeyCode::Esc) => {
-                app.set_mode(Mode::Normal);
+                // app.set_mode(Mode::Normal);
+                let single = app.single_selection();
+                app.selection = Selection::Single(single);
+
+                app.mode = Mode::Normal;
                 app.input = None;
             }
             (Mode::Normal | Mode::Visual, KeyCode::Char('d'))
@@ -461,7 +465,8 @@ fn event_main(app: &mut App) -> Result<bool> {
             }
             (Mode::Normal, KeyCode::Char('w')) => match &app.path {
                 None => {
-                    app.popup = Popup::Filename("".into());
+                    let popup = Popup::Filename("".into());
+                    app.set_popup(popup);
                 }
                 Some(path) => app.write(path.clone()),
             },
@@ -472,33 +477,46 @@ fn event_main(app: &mut App) -> Result<bool> {
             (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.execute(Move::new(1)),
             (Mode::Normal, KeyCode::Char('e')) => app.change_endian(),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.execute(Delete::new()),
-            (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
-            (Mode::Normal, KeyCode::Char('i')) => app.set_mode(Mode::Insert),
+            // (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
+            (Mode::Normal, KeyCode::Char('v')) => {
+                app.mode = Mode::Visual;
+                app.selection = match &app.selection {
+                    Selection::Single(current) => Selection::Visual {
+                        current: *current,
+                        center: *current,
+                        range: *current..(*current + 1),
+                    },
+                    visual => visual.clone(),
+                };
+            }
+            // (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
+                app.mode = Mode::Replace;
+            }
+            (Mode::Normal, KeyCode::Char('i')) => {
+                app.mode = Mode::Insert;
+                app.execute(Insert);
+            }
             (Mode::Normal, KeyCode::Char('a')) => {
                 app.execute(Move::new(1));
-                app.set_mode(Mode::Insert);
+                app.execute(Insert);
+                app.mode = Mode::Insert;
             }
-            (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
-                match (app.input, c.to_digit(16)) {
-                    (None, Some(hex)) => {
-                        app.set(hex as u8);
-                        app.input = Some(hex);
-                    }
-                    (Some(a), Some(b)) => {
-                        app.set((a * 16 + b) as u8);
-                        app.input = None;
-
-                        app.execute(Move::new(1));
-                        app.set_mode(Mode::Normal);
-
-                        if mode == Mode::Insert {
-                            app.set_mode(Mode::Insert);
-                        }
-                    }
-                    _ => {}
+            (Mode::Replace | Mode::Insert, KeyCode::Char(c)) => match (app.input, c.to_digit(16)) {
+                (None, Some(hex)) => {
+                    app.execute(Set::new(hex as u8));
+                    app.input = Some(hex);
                 }
-            }
+                (Some(a), Some(b)) => {
+                    // TODO: add group
+                    app.execute(Set::new((a * 16 + b) as u8));
+                    app.execute(Move::new(1));
+                    app.execute(Insert);
+
+                    app.input = None;
+                }
+                _ => {}
+            },
             _ => {}
         },
         _ => {}
@@ -508,7 +526,7 @@ fn event_main(app: &mut App) -> Result<bool> {
 }
 
 fn event_filename(app: &mut App) -> Result<bool> {
-    let Popup::Filename(ref mut name) = &mut app.popup else {
+    let Some(Popup::Filename(ref mut name)) = &mut app.popup else {
         return Ok(false);
     };
 
@@ -519,7 +537,7 @@ fn event_filename(app: &mut App) -> Result<bool> {
                 app.write_ask(path);
             }
             KeyCode::Esc => {
-                app.popup = Popup::None;
+                app.clear_popup();
             }
             KeyCode::Char(ch) => name.push(ch),
             KeyCode::Backspace => {
@@ -536,7 +554,7 @@ fn event_viewonly(app: &mut App) -> Result<bool> {
     if let Event::Key(key) = event::read()? {
         match key.code {
             KeyCode::Enter | KeyCode::Esc => {
-                app.popup = Popup::None;
+                app.clear_popup();
             }
             _ => {}
         }
@@ -546,7 +564,7 @@ fn event_viewonly(app: &mut App) -> Result<bool> {
 }
 
 fn event_overwrite(app: &mut App) -> Result<bool> {
-    let Popup::Overwrite(path) = &app.popup else {
+    let Some(Popup::Overwrite(path)) = &app.popup else {
         return Ok(false);
     };
 
@@ -554,10 +572,10 @@ fn event_overwrite(app: &mut App) -> Result<bool> {
         match key.code {
             KeyCode::Enter | KeyCode::Char('y') => {
                 app.write(path.clone());
-                app.popup = Popup::None;
+                app.clear_popup();
             }
             KeyCode::Esc | KeyCode::Char('n') => {
-                app.popup = Popup::None;
+                app.clear_popup();
             }
             _ => {}
         }
@@ -571,10 +589,10 @@ fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
         terminal.draw(|f| ui(f, &mut app))?;
 
         let quit = match app.popup {
-            Popup::None => event_main(&mut app)?,
-            Popup::Filename(_) => event_filename(&mut app)?,
-            Popup::FileErr(_) => event_viewonly(&mut app)?,
-            Popup::Overwrite(_) => event_overwrite(&mut app)?,
+            None => event_main(&mut app)?,
+            Some(Popup::Filename(_)) => event_filename(&mut app)?,
+            Some(Popup::FileErr(_)) => event_viewonly(&mut app)?,
+            Some(Popup::Overwrite(_)) => event_overwrite(&mut app)?,
         };
 
         if quit {
