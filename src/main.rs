@@ -510,6 +510,9 @@ fn event_main(app: &mut App) -> Result<bool> {
                 app.execute(Insert);
                 app.mode = Mode::Insert;
             }
+            (Mode::Normal, KeyCode::Char('x')) => {
+                app.execute(Set::new(app.config.empty_value));
+            }
             (Mode::Replace | Mode::Insert, KeyCode::Char(c)) => match (app.input, c.to_digit(16)) {
                 (None, Some(hex)) => {
                     app.execute(Set::new(hex as u8));

@@ -11,6 +11,7 @@ end
 return {
 	page = 4096,
 	endian = "big",
+    empty_value = 0x00,
 
 	highlight = function(buffer)
 		local header = buffer.read(0, 6)
