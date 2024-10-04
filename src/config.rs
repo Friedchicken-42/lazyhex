@@ -14,6 +14,7 @@ pub struct Config<'lua> {
     pub page: i32,
     pub endian: Endian,
     pub highlight: Function<'lua>,
+    pub empty_value: u8,
 }
 
 impl<'lua> Config<'lua> {
@@ -24,6 +25,7 @@ impl<'lua> Config<'lua> {
             page: 256,
             endian: Endian::Big,
             highlight,
+            empty_value: 0x00,
         }
     }
 
@@ -48,6 +50,7 @@ impl<'lua> Config<'lua> {
             page: table.get("page").unwrap_or(config.page),
             endian,
             highlight: table.get("highlight").unwrap_or(config.highlight),
+            empty_value: table.get("empty_value").unwrap_or(config.empty_value),
         })
     }
 }

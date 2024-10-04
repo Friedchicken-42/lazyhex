@@ -444,12 +444,12 @@ fn event_main(app: &mut App) -> Result<bool> {
         Event::Key(key) => match (app.mode, key.code) {
             (_, KeyCode::Char('q')) => return Ok(true),
             (_, KeyCode::Esc) => app.set_mode(Mode::Normal),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('d'))
+            (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
                 if key.modifiers == KeyModifiers::CONTROL =>
             {
                 app.execute(Move::new(app.config.page))
             }
-            (Mode::Normal | Mode::Visual, KeyCode::Char('u'))
+            (Mode::Normal | Mode::Visual, KeyCode::Char('u' | 'b'))
                 if key.modifiers == KeyModifiers::CONTROL =>
             {
                 app.execute(Move::new(-app.config.page))
@@ -466,11 +466,19 @@ fn event_main(app: &mut App) -> Result<bool> {
                 Some(path) => app.write(path.clone()),
             },
             (Mode::Normal, KeyCode::Char('u')) => app.undo(),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('h')) => app.execute(Move::new(-1)),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('j')) => app.execute(Move::new(16)),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('k')) => app.execute(Move::new(-16)),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('l')) => app.execute(Move::new(1)),
-            (Mode::Normal, KeyCode::Char('e')) => app.change_endian(),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('h') | KeyCode::Left) => {
+                app.execute(Move::new(-1))
+            }
+            (Mode::Normal | Mode::Visual, KeyCode::Char('j') | KeyCode::Down) => {
+                app.execute(Move::new(16))
+            }
+            (Mode::Normal | Mode::Visual, KeyCode::Char('k') | KeyCode::Up) => {
+                app.execute(Move::new(-16))
+            }
+            (Mode::Normal | Mode::Visual, KeyCode::Char('l') | KeyCode::Right) => {
+                app.execute(Move::new(1))
+            }
+            (Mode::Normal, KeyCode::Char('e' | '`' | '~')) => app.change_endian(),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.execute(Delete::new()),
             (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
             (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
@@ -479,6 +487,9 @@ fn event_main(app: &mut App) -> Result<bool> {
                 app.execute(Move::new(1));
                 app.set_mode(Mode::Insert);
             }
+            (Mode::Normal, KeyCode::Char('x')) => {
+                app.execute(Set::new(app.config.empty_value));
+            } 
             (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
                 match (app.input, c.to_digit(16)) {
                     (None, Some(hex)) => {
