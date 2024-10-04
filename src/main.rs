@@ -1,6 +1,8 @@
 mod app;
+mod command;
 mod config;
 
+use command::{Delete, Insert, Move, Position, Set};
 use num_traits::ops::bytes::FromBytes;
 use std::{
     io::{stdout, Stdout},
@@ -8,7 +10,7 @@ use std::{
     path::PathBuf,
 };
 
-use app::{App, Delete, Highlight, Insert, Mode, Move, Popup, Position, Selection, Set};
+use app::{App, Highlight, Mode, Popup, Selection};
 use clap::Parser;
 use config::Endian;
 use mlua::Lua;
@@ -441,14 +443,7 @@ fn event_main(app: &mut App) -> Result<bool> {
     match event::read()? {
         Event::Key(key) => match (app.mode, key.code) {
             (_, KeyCode::Char('q')) => return Ok(true),
-            (_, KeyCode::Esc) => {
-                // app.set_mode(Mode::Normal);
-                let single = app.single_selection();
-                app.selection = Selection::Single(single);
-
-                app.mode = Mode::Normal;
-                app.input = None;
-            }
+            (_, KeyCode::Esc) => app.set_mode(Mode::Normal),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
                 if key.modifiers == KeyModifiers::CONTROL =>
             {
@@ -485,49 +480,38 @@ fn event_main(app: &mut App) -> Result<bool> {
             }
             (Mode::Normal, KeyCode::Char('e' | '`' | '~')) => app.change_endian(),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.execute(Delete::new()),
-            // (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
-            (Mode::Normal, KeyCode::Char('v')) => {
-                app.mode = Mode::Visual;
-                app.selection = match &app.selection {
-                    Selection::Single(current) => Selection::Visual {
-                        current: *current,
-                        center: *current,
-                        range: *current..(*current + 1),
-                    },
-                    visual => visual.clone(),
-                };
-            }
-            // (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
-                app.mode = Mode::Replace;
-            }
-            (Mode::Normal, KeyCode::Char('i')) => {
-                app.mode = Mode::Insert;
-                app.execute(Insert);
-            }
+            (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
+            (Mode::Normal, KeyCode::Char('i')) => app.set_mode(Mode::Insert),
             (Mode::Normal, KeyCode::Char('a')) => {
                 app.execute(Move::new(1));
-                app.execute(Insert);
-                app.mode = Mode::Insert;
+                app.set_mode(Mode::Insert);
             }
             (Mode::Normal, KeyCode::Char('x')) => {
                 app.execute(Set::new(app.config.empty_value));
-            }
-            (Mode::Replace | Mode::Insert, KeyCode::Char(c)) => match (app.input, c.to_digit(16)) {
-                (None, Some(hex)) => {
-                    app.execute(Set::new(hex as u8));
-                    app.input = Some(hex);
-                }
-                (Some(a), Some(b)) => {
-                    // TODO: add group
-                    app.execute(Set::new((a * 16 + b) as u8));
-                    app.execute(Move::new(1));
-                    app.execute(Insert);
+            } 
+            (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
+                match (app.input, c.to_digit(16)) {
+                    (None, Some(hex)) => {
+                        app.execute(Set::new(hex as u8));
+                        app.input = Some(hex);
+                    }
+                    (Some(a), Some(b)) => {
+                        // TODO: add group
+                        app.execute(Set::new((a * 16 + b) as u8));
+                        app.execute(Move::new(1));
 
-                    app.input = None;
+                        if mode == Mode::Insert {
+                            app.execute(Insert);
+                        } else {
+                            app.set_mode(Mode::Normal);
+                        }
+
+                        app.input = None;
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
             _ => {}
         },
         _ => {}
