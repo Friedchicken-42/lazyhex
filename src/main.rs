@@ -2,7 +2,7 @@ mod app;
 mod command;
 mod config;
 
-use command::{Delete, Insert, Move, Position, Set};
+use command::{Delete, Insert, Move, Position, Set, SetMode};
 use num_traits::ops::bytes::FromBytes;
 use std::{
     io::{stdout, Stdout},
@@ -443,7 +443,7 @@ fn event_main(app: &mut App) -> Result<bool> {
     match event::read()? {
         Event::Key(key) => match (app.mode, key.code) {
             (_, KeyCode::Char('q')) => return Ok(true),
-            (_, KeyCode::Esc) => app.set_mode(Mode::Normal),
+            (_, KeyCode::Esc) => app.execute(SetMode::new(Mode::Normal)),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
                 if key.modifiers == KeyModifiers::CONTROL =>
             {
@@ -454,6 +454,7 @@ fn event_main(app: &mut App) -> Result<bool> {
             {
                 app.execute(Move::new(-app.config.page))
             }
+            (_, KeyCode::Char('u')) => app.undo(),
             (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.execute(Position::new(0)),
             (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
                 app.execute(Position::new(app.data.len() - 1))
@@ -465,7 +466,6 @@ fn event_main(app: &mut App) -> Result<bool> {
                 }
                 Some(path) => app.write(path.clone()),
             },
-            (Mode::Normal, KeyCode::Char('u')) => app.undo(),
             (Mode::Normal | Mode::Visual, KeyCode::Char('h') | KeyCode::Left) => {
                 app.execute(Move::new(-1))
             }
@@ -480,16 +480,18 @@ fn event_main(app: &mut App) -> Result<bool> {
             }
             (Mode::Normal, KeyCode::Char('e' | '`' | '~')) => app.change_endian(),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.execute(Delete::new()),
-            (Mode::Normal, KeyCode::Char('v')) => app.set_mode(Mode::Visual),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => app.set_mode(Mode::Replace),
-            (Mode::Normal, KeyCode::Char('i')) => app.set_mode(Mode::Insert),
+            (Mode::Normal, KeyCode::Char('v')) => app.execute(SetMode::new(Mode::Visual)),
+            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
+                app.execute(SetMode::new(Mode::Replace))
+            }
+            (Mode::Normal, KeyCode::Char('i')) => app.execute(SetMode::new(Mode::Insert)),
             (Mode::Normal, KeyCode::Char('a')) => {
                 app.execute(Move::new(1));
-                app.set_mode(Mode::Insert);
+                app.execute(SetMode::new(Mode::Insert));
             }
             (Mode::Normal, KeyCode::Char('x')) => {
                 app.execute(Set::new(app.config.empty_value));
-            } 
+            }
             (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
                 match (app.input, c.to_digit(16)) {
                     (None, Some(hex)) => {
@@ -504,7 +506,7 @@ fn event_main(app: &mut App) -> Result<bool> {
                         if mode == Mode::Insert {
                             app.execute(Insert);
                         } else {
-                            app.set_mode(Mode::Normal);
+                            app.execute(SetMode::new(Mode::Normal));
                         }
 
                         app.input = None;

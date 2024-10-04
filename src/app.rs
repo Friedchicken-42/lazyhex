@@ -5,7 +5,7 @@ use mlua::{FromLua, Function, Lua, Table};
 use ratatui::style::Color;
 
 use crate::{
-    command::{Command, Insert, Move},
+    command::{Command, Move},
     config::{Config, Endian},
     Args,
 };
@@ -227,37 +227,6 @@ impl<'lua> App<'lua> {
 
             if command.type_id() != TypeId::of::<Move>() {
                 break;
-            }
-        }
-    }
-
-    // TODO: this should be a command
-    pub fn set_mode(&mut self, mode: Mode) {
-        if self.mode == mode {
-            return;
-        }
-
-        self.mode = mode;
-
-        match mode {
-            Mode::Normal => {
-                let single = self.single_selection();
-                self.selection = Selection::Single(single);
-                self.input = None;
-            }
-            Mode::Visual => {
-                self.selection = match &self.selection {
-                    Selection::Single(current) => Selection::Visual {
-                        current: *current,
-                        center: *current,
-                        range: *current..(*current + 1),
-                    },
-                    visual => visual.clone(),
-                };
-            }
-            Mode::Replace => {}
-            Mode::Insert => {
-                self.execute(Insert);
             }
         }
     }

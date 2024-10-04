@@ -1,12 +1,62 @@
-use std::any::Any;
+use std::{any::Any, fmt::Debug};
 
 use crate::app::{App, Mode, Selection};
 
-pub trait Command: Any {
+pub trait Command: Any + Debug {
     fn execute(&mut self, app: &mut App);
     fn undo(&self, app: &mut App);
 }
 
+#[derive(Debug)]
+pub struct SetMode {
+    mode: Mode,
+    selection: Selection,
+}
+
+impl SetMode {
+    pub fn new(mode: Mode) -> Self {
+        Self {
+            mode,
+            selection: Selection::Single(0),
+        }
+    }
+}
+
+impl Command for SetMode {
+    fn execute(&mut self, app: &mut App) {
+        std::mem::swap(&mut app.mode, &mut self.mode);
+        self.selection = app.selection.clone();
+
+        match app.mode {
+            Mode::Normal => {
+                let single = app.single_selection();
+                app.selection = Selection::Single(single);
+                app.input = None;
+            }
+            Mode::Visual => {
+                app.selection = match &self.selection {
+                    Selection::Single(current) => Selection::Visual {
+                        current: *current,
+                        center: *current,
+                        range: *current..(*current + 1),
+                    },
+                    visual => visual.clone(),
+                };
+            }
+            Mode::Replace => {}
+            Mode::Insert => {
+                app.execute(Insert);
+            }
+        }
+    }
+
+    fn undo(&self, app: &mut App) {
+        app.mode = self.mode;
+        app.selection = self.selection.clone();
+    }
+}
+
+#[derive(Debug)]
 pub struct Move(i32);
 
 impl Move {
@@ -46,6 +96,7 @@ impl Command for Move {
     }
 }
 
+#[derive(Debug)]
 pub struct Position {
     new: usize,
     old: usize,
@@ -83,6 +134,7 @@ impl Command for Position {
     }
 }
 
+#[derive(Debug)]
 pub struct Delete(Vec<u8>);
 
 impl Delete {
@@ -129,6 +181,7 @@ impl Command for Delete {
     }
 }
 
+#[derive(Debug)]
 pub struct Set(Vec<u8>);
 
 impl Set {
@@ -164,6 +217,7 @@ impl Command for Set {
     }
 }
 
+#[derive(Debug)]
 pub struct Insert;
 
 impl Command for Insert {
