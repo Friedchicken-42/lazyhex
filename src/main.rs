@@ -24,7 +24,7 @@ use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Padding, Paragraph},
+    widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
     Frame, Terminal,
 };
 
@@ -390,25 +390,30 @@ fn ui_primary(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn ui_popup(f: &mut Frame, app: &mut App) {
-    let [area] = Layout::horizontal([Constraint::Length(MAIN / 3)])
-        .flex(Flex::Center)
-        .areas(f.area());
-    let [area] = Layout::vertical([Constraint::Length(3)])
-        .flex(Flex::Center)
-        .areas(area);
-
     let (title, data) = match &app.popup {
         None => ("", ""),
         Some(Popup::Filename(filename)) => ("Filename", filename.as_str()),
-        Some(Popup::FileErr(error)) => ("Error", error.as_str()),
+        Some(Popup::Error { title, content }) => (title.as_str(), content.as_str()),
         Some(Popup::Overwrite(path)) => ("Overwrite? [Y/n]", path.as_os_str().to_str().unwrap()),
     };
 
-    let popup = Paragraph::new(data).block(
-        Block::bordered()
-            .padding(Padding::horizontal(2))
-            .title(title),
-    );
+    let width = (MAIN / 2).min((data.len() + 4) as u16);
+    let height = (data.len() as u16 / width + 3).min(app.height - 20);
+
+    let [area] = Layout::horizontal([Constraint::Length(width)])
+        .flex(Flex::Center)
+        .areas(f.area());
+    let [area] = Layout::vertical([Constraint::Length(height)])
+        .flex(Flex::Center)
+        .areas(area);
+
+    let popup = Paragraph::new(data)
+        .block(
+            Block::bordered()
+                .padding(Padding::horizontal(2))
+                .title(title),
+        )
+        .wrap(Wrap { trim: true });
 
     f.render_widget(Clear, area);
     f.render_widget(popup, area);
@@ -442,6 +447,13 @@ fn event_main(app: &mut App) -> Result<bool> {
     #[allow(clippy::single_match)]
     match event::read()? {
         Event::Key(key) => match (app.mode, key.code) {
+            (_, KeyCode::Char('y')) => {
+                let popup = Popup::Error {
+                    title: "kek".into(),
+                    content: "kekkoni".repeat(100),
+                };
+                app.set_popup(popup);
+            }
             (_, KeyCode::Char('q')) => return Ok(true),
             (_, KeyCode::Esc) => app.execute(SetMode::new(Mode::Normal)),
             (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
@@ -588,7 +600,7 @@ fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
         let quit = match app.popup {
             None => event_main(&mut app)?,
             Some(Popup::Filename(_)) => event_filename(&mut app)?,
-            Some(Popup::FileErr(_)) => event_viewonly(&mut app)?,
+            Some(Popup::Error { .. }) => event_viewonly(&mut app)?,
             Some(Popup::Overwrite(_)) => event_overwrite(&mut app)?,
         };
 

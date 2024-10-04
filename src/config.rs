@@ -9,12 +9,19 @@ pub enum Endian {
     Big,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum HighlightUpdate {
+    Delete,
+    Reload,
+}
+
 #[derive(Debug)]
 pub struct Config<'lua> {
     pub page: i32,
     pub endian: Endian,
     pub highlight: Function<'lua>,
     pub empty_value: u8,
+    pub on_delete: HighlightUpdate,
 }
 
 impl<'lua> Config<'lua> {
@@ -26,6 +33,7 @@ impl<'lua> Config<'lua> {
             endian: Endian::Big,
             highlight,
             empty_value: 0x00,
+            on_delete: HighlightUpdate::Reload,
         }
     }
 
@@ -43,7 +51,15 @@ impl<'lua> Config<'lua> {
         let endian = match table.get::<&str, String>("endian") {
             Ok(s) if s == "little" || s == "l" => Endian::Little,
             Ok(s) if s == "big" || s == "b" => Endian::Big,
-            _ => Endian::Big,
+            Ok(s) => panic!("wrong endian type: `{s}`"),
+            Err(_) => config.endian,
+        };
+
+        let on_delete = match table.get::<&str, String>("on_delete") {
+            Ok(s) if s == "delete" => HighlightUpdate::Delete,
+            Ok(s) if s == "reload" => HighlightUpdate::Reload,
+            Ok(s) => panic!("`{s}` can only be `delete | reload`"),
+            Err(_) => config.on_delete,
         };
 
         Ok(Self {
@@ -51,6 +67,7 @@ impl<'lua> Config<'lua> {
             endian,
             highlight: table.get("highlight").unwrap_or(config.highlight),
             empty_value: table.get("empty_value").unwrap_or(config.empty_value),
+            on_delete,
         })
     }
 }

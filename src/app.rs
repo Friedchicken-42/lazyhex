@@ -6,7 +6,7 @@ use ratatui::style::Color;
 
 use crate::{
     command::{Command, Move},
-    config::{Config, Endian},
+    config::{Config, Endian, HighlightUpdate},
     Args,
 };
 
@@ -29,7 +29,8 @@ pub struct Highlight {
     pub text: String,
 }
 
-fn load_highlights(data: &[u8], lua: &Lua, callback: &Function) -> Result<Vec<Highlight>> {
+// TODO: find a way to handle error with `Popup::Error`
+fn load_highlights(data: &[u8], lua: &Lua, callback: &Function) -> Vec<Highlight> {
     let mut highlights = vec![];
 
     let assert_range = |start: usize, end: usize| -> mlua::Result<()> {
@@ -142,8 +143,8 @@ fn load_highlights(data: &[u8], lua: &Lua, callback: &Function) -> Result<Vec<Hi
     });
 
     match out {
-        Ok(_) => Ok(highlights),
-        Err(_) => Ok(vec![]),
+        Ok(_) => highlights,
+        Err(_) => vec![],
     }
 }
 
@@ -158,7 +159,7 @@ pub enum Mode {
 #[derive(PartialEq)]
 pub enum Popup {
     Filename(String),
-    FileErr(String),
+    Error { title: String, content: String },
     Overwrite(PathBuf),
 }
 
@@ -169,6 +170,7 @@ pub struct App<'lua> {
     pub selection: Selection,
     pub highlights: Vec<Highlight>,
     pub history: Vec<Box<dyn Command>>,
+    pub lua: &'lua Lua,
 
     pub height: u16,
     pub mode: Mode,
@@ -186,7 +188,7 @@ impl<'lua> App<'lua> {
             None => (vec![0], None),
         };
 
-        let highlights = load_highlights(&data, lua, &config.highlight)?;
+        let highlights = load_highlights(&data, lua, &config.highlight);
 
         Ok(Self {
             data,
@@ -195,6 +197,7 @@ impl<'lua> App<'lua> {
             selection: Selection::Single(0),
             highlights,
             history: vec![],
+            lua,
 
             height: height - 4,
             mode: Mode::Normal,
@@ -266,22 +269,25 @@ impl<'lua> App<'lua> {
         }
     }
 
-    pub fn move_highlights(&mut self, range: Range<usize>, remove: bool) {
+    pub fn update_highlights(&mut self) {
+        match self.config.on_delete {
+            HighlightUpdate::Delete => {
+                let range = self.selected();
+                self.move_highlights(range);
+            }
+            HighlightUpdate::Reload => {
+                self.highlights = load_highlights(&self.data, self.lua, &self.config.highlight);
+            }
+        }
+    }
+
+    fn move_highlights(&mut self, range: Range<usize>) {
         for highlight in self.highlights.iter_mut() {
-            if remove {
-                if highlight.start >= range.start {
-                    highlight.start = highlight.start.saturating_sub(range.len());
-                }
-                if highlight.end > range.start {
-                    highlight.end = highlight.end.saturating_sub(range.len());
-                }
-            } else {
-                if highlight.start >= range.start {
-                    highlight.start += range.len();
-                }
-                if highlight.end > range.start {
-                    highlight.end += range.len();
-                }
+            if highlight.start >= range.start {
+                highlight.start = highlight.start.saturating_sub(range.len());
+            }
+            if highlight.end > range.start {
+                highlight.end = highlight.end.saturating_sub(range.len());
             }
         }
     }
@@ -294,7 +300,10 @@ impl<'lua> App<'lua> {
                 self.clear_popup();
             }
             Err(e) => {
-                let popup = Popup::FileErr(format!("{e:?}"));
+                let popup = Popup::Error {
+                    title: "File Error".into(),
+                    content: format!("{e:?}"),
+                };
                 self.set_popup(popup);
             }
         }

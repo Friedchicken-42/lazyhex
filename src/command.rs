@@ -148,7 +148,7 @@ impl Command for Delete {
         let selection = app.selected();
         let deleted = app.data.drain(selection.clone()).collect();
 
-        app.move_highlights(selection.clone(), true);
+        app.update_highlights();
 
         let current = match &app.selection {
             Selection::Single(current) => *current,
@@ -192,8 +192,6 @@ impl Set {
 
 impl Command for Set {
     fn execute(&mut self, app: &mut App) {
-        // let current = app.single_selection();
-        // std::mem::swap(&mut app.data[current], &mut self.0);
         let range = app.selected();
         let old = &app.data[range.clone()].to_vec();
 
@@ -220,10 +218,12 @@ impl Command for Set {
 #[derive(Debug)]
 pub struct Insert;
 
+// TODO: should call `update_highlights`
 impl Command for Insert {
     fn execute(&mut self, app: &mut App) {
         let current = app.single_selection();
         app.data.insert(current, 0);
+        app.edited = true;
     }
 
     fn undo(&self, app: &mut App) {
