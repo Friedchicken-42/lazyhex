@@ -207,6 +207,7 @@ impl Command for Set {
             panic!("wrong range for `Set` and `selection`");
         }
 
+        app.update_highlights();
         self.0 = old.clone();
     }
 
@@ -218,11 +219,11 @@ impl Command for Set {
 #[derive(Debug)]
 pub struct Insert;
 
-// TODO: should call `update_highlights`
 impl Command for Insert {
     fn execute(&mut self, app: &mut App) {
         let current = app.single_selection();
         app.data.insert(current, 0);
+        app.update_highlights();
         app.edited = true;
     }
 

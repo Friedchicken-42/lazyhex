@@ -11,7 +11,7 @@ pub enum Endian {
 
 #[derive(Debug, Clone, Copy)]
 pub enum HighlightUpdate {
-    Delete,
+    Update,
     Reload,
 }
 
@@ -56,7 +56,7 @@ impl<'lua> Config<'lua> {
         };
 
         let on_delete = match table.get::<&str, String>("on_delete") {
-            Ok(s) if s == "delete" => HighlightUpdate::Delete,
+            Ok(s) if s == "update" => HighlightUpdate::Update,
             Ok(s) if s == "reload" => HighlightUpdate::Reload,
             Ok(s) => panic!("`{s}` can only be `delete | reload`"),
             Err(_) => config.on_delete,

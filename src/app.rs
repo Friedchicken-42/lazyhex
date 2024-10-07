@@ -271,7 +271,7 @@ impl<'lua> App<'lua> {
 
     pub fn update_highlights(&mut self) {
         match self.config.on_delete {
-            HighlightUpdate::Delete => {
+            HighlightUpdate::Update => {
                 let range = self.selected();
                 self.move_highlights(range);
             }
