@@ -1,6 +1,6 @@
 use std::{any::Any, fmt::Debug};
 
-use crate::app::{App, Mode, Selection};
+use crate::app::{App, HighlightUpdate, Mode, Selection};
 
 pub trait Command: Any + Debug {
     fn execute(&mut self, app: &mut App);
@@ -148,7 +148,7 @@ impl Command for Delete {
         let selection = app.selected();
         let deleted = app.data.drain(selection.clone()).collect();
 
-        app.update_highlights();
+        app.update_highlights(HighlightUpdate::Remove);
 
         let current = match &app.selection {
             Selection::Single(current) => *current,
@@ -207,7 +207,8 @@ impl Command for Set {
             panic!("wrong range for `Set` and `selection`");
         }
 
-        app.update_highlights();
+        // TODO: should be skip
+        app.update_highlights(HighlightUpdate::Add);
         self.0 = old.clone();
     }
 
@@ -223,7 +224,7 @@ impl Command for Insert {
     fn execute(&mut self, app: &mut App) {
         let current = app.single_selection();
         app.data.insert(current, 0);
-        app.update_highlights();
+        app.update_highlights(HighlightUpdate::Add);
         app.edited = true;
     }
 

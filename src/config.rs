@@ -10,7 +10,7 @@ pub enum Endian {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum HighlightUpdate {
+pub enum HighlightOnDelete {
     Update,
     Reload,
 }
@@ -21,7 +21,7 @@ pub struct Config<'lua> {
     pub endian: Endian,
     pub highlight: Function<'lua>,
     pub empty_value: u8,
-    pub on_delete: HighlightUpdate,
+    pub on_delete: HighlightOnDelete,
 }
 
 impl<'lua> Config<'lua> {
@@ -33,7 +33,7 @@ impl<'lua> Config<'lua> {
             endian: Endian::Big,
             highlight,
             empty_value: 0x00,
-            on_delete: HighlightUpdate::Reload,
+            on_delete: HighlightOnDelete::Reload,
         }
     }
 
@@ -56,8 +56,8 @@ impl<'lua> Config<'lua> {
         };
 
         let on_delete = match table.get::<&str, String>("on_delete") {
-            Ok(s) if s == "update" => HighlightUpdate::Update,
-            Ok(s) if s == "reload" => HighlightUpdate::Reload,
+            Ok(s) if s == "update" => HighlightOnDelete::Update,
+            Ok(s) if s == "reload" => HighlightOnDelete::Reload,
             Ok(s) => panic!("`{s}` can only be `delete | reload`"),
             Err(_) => config.on_delete,
         };

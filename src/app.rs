@@ -6,7 +6,7 @@ use ratatui::style::Color;
 
 use crate::{
     command::{Command, Move},
-    config::{Config, Endian, HighlightUpdate},
+    config::{Config, Endian, HighlightOnDelete},
     Args,
 };
 
@@ -163,6 +163,11 @@ pub enum Popup {
     Overwrite(PathBuf),
 }
 
+pub enum HighlightUpdate {
+    Add,
+    Remove,
+}
+
 pub struct App<'lua> {
     pub data: Vec<u8>,
     pub path: Option<PathBuf>,
@@ -269,25 +274,37 @@ impl<'lua> App<'lua> {
         }
     }
 
-    pub fn update_highlights(&mut self) {
+    pub fn update_highlights(&mut self, update: HighlightUpdate) {
         match self.config.on_delete {
-            HighlightUpdate::Update => {
+            HighlightOnDelete::Update => {
                 let range = self.selected();
-                self.move_highlights(range);
+                self.move_highlights(range, update);
             }
-            HighlightUpdate::Reload => {
+            HighlightOnDelete::Reload => {
                 self.highlights = load_highlights(&self.data, self.lua, &self.config.highlight);
             }
         }
     }
 
-    fn move_highlights(&mut self, range: Range<usize>) {
+    fn move_highlights(&mut self, range: Range<usize>, update: HighlightUpdate) {
         for highlight in self.highlights.iter_mut() {
-            if highlight.start >= range.start {
-                highlight.start = highlight.start.saturating_sub(range.len());
-            }
-            if highlight.end > range.start {
-                highlight.end = highlight.end.saturating_sub(range.len());
+            match update {
+                HighlightUpdate::Remove => {
+                    if highlight.start >= range.start {
+                        highlight.start = highlight.start.saturating_sub(range.len());
+                    }
+                    if highlight.end > range.start {
+                        highlight.end = highlight.end.saturating_sub(range.len());
+                    }
+                }
+                HighlightUpdate::Add => {
+                    if highlight.start >= range.start {
+                        highlight.start += range.len();
+                    }
+                    if highlight.end > range.start {
+                        highlight.end += range.len();
+                    }
+                }
             }
         }
     }
