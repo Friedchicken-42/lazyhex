@@ -12,7 +12,7 @@ return {
 	page = 4096,
 	endian = "big",
 	empty_value = 0x00,
-	on_delete = "reload",
+	on_delete = "update",
 
 	highlight = function(buffer)
 		local header = buffer.read(0, 6)

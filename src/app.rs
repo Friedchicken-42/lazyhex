@@ -1,12 +1,17 @@
-use std::{any::TypeId, ops::Range, path::PathBuf, str::FromStr};
+use std::{ops::Range, path::PathBuf, str::FromStr};
 
 use anyhow::Result;
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 use mlua::{FromLua, Function, Lua, Table};
 use ratatui::style::Color;
 
 use crate::{
-    command::{Command, Move},
+    command::{
+        Command, Delete, HistoryStatus, Insert, Move, OpenPopup, Position, Quit, Set, SetMode,
+        Undo, Write,
+    },
     config::{Config, Endian, HighlightOnDelete},
+    popup::{Popup, ViewOnly},
     Args,
 };
 
@@ -29,7 +34,7 @@ pub struct Highlight {
     pub text: String,
 }
 
-// TODO: find a way to handle error with `Popup::Error`
+// TODO: find a way to handle error with a Popup
 fn load_highlights(data: &[u8], lua: &Lua, callback: &Function) -> Vec<Highlight> {
     let mut highlights = vec![];
 
@@ -156,12 +161,15 @@ pub enum Mode {
     Insert,
 }
 
+/*
 #[derive(PartialEq)]
 pub enum Popup {
     Filename(String),
     Error { title: String, content: String },
     Overwrite(PathBuf),
+    Highlight,
 }
+*/
 
 pub enum HighlightUpdate {
     Add,
@@ -179,9 +187,10 @@ pub struct App<'lua> {
 
     pub height: u16,
     pub mode: Mode,
-    pub popup: Option<Popup>,
+    pub popup: Option<Box<dyn Popup>>,
     pub input: Option<u32>,
     pub edited: bool,
+    pub quit: bool,
 }
 
 impl<'lua> App<'lua> {
@@ -209,10 +218,106 @@ impl<'lua> App<'lua> {
             popup: None,
             input: None,
             edited: false,
+            quit: false,
         })
     }
 
-    pub fn set_popup(&mut self, popup: Popup) {
+    pub fn handle(&mut self, event: Event) -> Vec<Box<dyn Command>> {
+        match event {
+            Event::Key(key) => match (self.mode, key.code) {
+                (Mode::Normal, KeyCode::Char('y')) => {
+                    let popup = ViewOnly {
+                        title: "a".into(),
+                        content: "b".into(),
+                    };
+
+                    let command = OpenPopup::new(Box::new(popup));
+                    vec![Box::new(command)]
+                }
+                (_, KeyCode::Char('q')) => vec![Box::new(Quit)],
+
+                (_, KeyCode::Esc) => vec![Box::new(SetMode::new(Mode::Normal))],
+                (Mode::Normal | Mode::Visual, KeyCode::Char('h') | KeyCode::Left) => {
+                    vec![Box::new(Move::new(-1))]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('j') | KeyCode::Down) => {
+                    vec![Box::new(Move::new(16))]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('k') | KeyCode::Up) => {
+                    vec![Box::new(Move::new(-16))]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('l') | KeyCode::Right) => {
+                    vec![Box::new(Move::new(1))]
+                }
+
+                (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
+                    if key.modifiers == KeyModifiers::CONTROL =>
+                {
+                    vec![Box::new(Move::new(self.config.page))]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('u' | 'b'))
+                    if key.modifiers == KeyModifiers::CONTROL =>
+                {
+                    vec![Box::new(Move::new(-self.config.page))]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => {
+                    vec![Box::new(Position::new(0))]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
+                    vec![Box::new(Position::new(self.data.len() - 1))]
+                }
+                (_, KeyCode::Char('u')) => vec![Box::new(Undo)],
+
+                (Mode::Normal, KeyCode::Char('e' | '`' | '~')) => {
+                    self.change_endian();
+                    vec![]
+                }
+                (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => vec![Box::new(Delete::new())],
+                (Mode::Normal, KeyCode::Char('v')) => vec![Box::new(SetMode::new(Mode::Visual))],
+                (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
+                    vec![Box::new(SetMode::new(Mode::Replace))]
+                }
+                (Mode::Normal, KeyCode::Char('i')) => vec![Box::new(SetMode::new(Mode::Insert))],
+                (Mode::Normal, KeyCode::Char('a')) => {
+                    vec![Box::new(Move::new(1)), Box::new(SetMode::new(Mode::Insert))]
+                }
+                (Mode::Normal, KeyCode::Char('x')) => {
+                    vec![Box::new(Set::new(self.config.empty_value))]
+                }
+                (Mode::Normal, KeyCode::Char('w')) => {
+                    vec![Box::new(Write)]
+                }
+
+                (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
+                    match (self.input, c.to_digit(16)) {
+                        (None, Some(hex)) => {
+                            self.input = Some(hex);
+
+                            vec![Box::new(Set::new(hex as u8))]
+                        }
+                        (Some(a), Some(b)) => {
+                            self.input = None;
+
+                            vec![
+                                Box::new(Set::new((a * 16 + b) as u8)),
+                                Box::new(Move::new(1)),
+                                if mode == Mode::Insert {
+                                    Box::new(Insert)
+                                } else {
+                                    Box::new(SetMode::new(Mode::Normal))
+                                },
+                            ]
+                        }
+                        _ => vec![],
+                    }
+                }
+                _ => vec![],
+            },
+            _ => vec![],
+        }
+    }
+
+    pub fn set_popup(&mut self, popup: Box<dyn Popup>) {
         self.popup = Some(popup);
     }
 
@@ -220,22 +325,11 @@ impl<'lua> App<'lua> {
         self.popup = None;
     }
 
-    pub fn execute(&mut self, mut command: impl Command + 'static) {
+    pub fn execute(&mut self, mut command: Box<dyn Command>) {
         command.execute(self);
-        self.history.push(Box::new(command));
-    }
 
-    pub fn undo(&mut self) {
-        loop {
-            let Some(command) = self.history.pop() else {
-                return;
-            };
-
-            command.undo(self);
-
-            if command.type_id() != TypeId::of::<Move>() {
-                break;
-            }
+        if command.history_status() != HistoryStatus::Skip {
+            self.history.push(command);
         }
     }
 
@@ -309,30 +403,20 @@ impl<'lua> App<'lua> {
         }
     }
 
-    pub fn write(&mut self, path: PathBuf) {
-        match std::fs::write(&path, &self.data) {
-            Ok(_) => {
-                self.path = Some(path);
-                self.edited = false;
-                self.clear_popup();
-            }
-            Err(e) => {
-                let popup = Popup::Error {
-                    title: "File Error".into(),
-                    content: format!("{e:?}"),
-                };
-                self.set_popup(popup);
-            }
-        }
-    }
+    pub fn write(&mut self) {
+        if let Some(path) = &self.path {
+            match std::fs::write(path, &self.data) {
+                Ok(_) => self.edited = false,
+                Err(e) => {
+                    let popup = Box::new(ViewOnly {
+                        title: format!("Filename Error: {path:?}"),
+                        content: format!("{e:?}"),
+                    });
 
-    pub fn write_ask(&mut self, path: PathBuf) {
-        match path.exists() {
-            true => {
-                let popup = Popup::Overwrite(path);
-                self.set_popup(popup);
+                    self.path = None;
+                    self.set_popup(popup);
+                }
             }
-            false => self.write(path),
         }
     }
 }

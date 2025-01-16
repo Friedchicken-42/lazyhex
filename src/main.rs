@@ -1,30 +1,31 @@
 mod app;
 mod command;
 mod config;
+mod popup;
 
-use command::{Delete, Insert, Move, Position, Set, SetMode};
+use crate::{
+    app::{App, Highlight, Selection},
+    config::Endian,
+};
+
 use num_traits::ops::bytes::FromBytes;
 use std::{
     io::{stdout, Stdout},
     ops::Range,
-    path::PathBuf,
 };
 
-use app::{App, Highlight, Mode, Popup, Selection};
 use clap::Parser;
-use config::Endian;
 use mlua::Lua;
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     crossterm::{
-        event::{self, Event, KeyCode, KeyModifiers},
-        execute,
+        event, execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
     layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
+    widgets::{Block, Borders, Padding},
     Frame, Terminal,
 };
 
@@ -389,36 +390,6 @@ fn ui_primary(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(block, main[0]);
 }
 
-fn ui_popup(f: &mut Frame, app: &mut App) {
-    let (title, data) = match &app.popup {
-        None => ("", ""),
-        Some(Popup::Filename(filename)) => ("Filename", filename.as_str()),
-        Some(Popup::Error { title, content }) => (title.as_str(), content.as_str()),
-        Some(Popup::Overwrite(path)) => ("Overwrite? [Y/n]", path.as_os_str().to_str().unwrap()),
-    };
-
-    let width = (MAIN / 2).min((data.len() + 4) as u16);
-    let height = (data.len() as u16 / width + 3).min(app.height - 20);
-
-    let [area] = Layout::horizontal([Constraint::Length(width)])
-        .flex(Flex::Center)
-        .areas(f.area());
-    let [area] = Layout::vertical([Constraint::Length(height)])
-        .flex(Flex::Center)
-        .areas(area);
-
-    let popup = Paragraph::new(data)
-        .block(
-            Block::bordered()
-                .padding(Padding::horizontal(2))
-                .title(title),
-        )
-        .wrap(Wrap { trim: true });
-
-    f.render_widget(Clear, area);
-    f.render_widget(popup, area);
-}
-
 fn ui(f: &mut Frame, app: &mut App) {
     let width = f.area().width;
 
@@ -438,173 +409,27 @@ fn ui(f: &mut Frame, app: &mut App) {
     ui_header(f, app, header);
     ui_primary(f, app, primary);
 
-    if app.popup.is_some() {
-        ui_popup(f, app);
+    if let Some(popup) = &app.popup {
+        popup.ui(f);
     }
-}
-
-fn event_main(app: &mut App) -> Result<bool> {
-    #[allow(clippy::single_match)]
-    match event::read()? {
-        Event::Key(key) => match (app.mode, key.code) {
-            (_, KeyCode::Char('y')) => {
-                let popup = Popup::Error {
-                    title: "kek".into(),
-                    content: "kekkoni".repeat(100),
-                };
-                app.set_popup(popup);
-            }
-            (_, KeyCode::Char('q')) => return Ok(true),
-            (_, KeyCode::Esc) => app.execute(SetMode::new(Mode::Normal)),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
-                if key.modifiers == KeyModifiers::CONTROL =>
-            {
-                app.execute(Move::new(app.config.page))
-            }
-            (Mode::Normal | Mode::Visual, KeyCode::Char('u' | 'b'))
-                if key.modifiers == KeyModifiers::CONTROL =>
-            {
-                app.execute(Move::new(-app.config.page))
-            }
-            (_, KeyCode::Char('u')) => app.undo(),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => app.execute(Position::new(0)),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
-                app.execute(Position::new(app.data.len() - 1))
-            }
-            (Mode::Normal, KeyCode::Char('w')) => match &app.path {
-                None => {
-                    let popup = Popup::Filename("".into());
-                    app.set_popup(popup);
-                }
-                Some(path) => app.write(path.clone()),
-            },
-            (Mode::Normal | Mode::Visual, KeyCode::Char('h') | KeyCode::Left) => {
-                app.execute(Move::new(-1))
-            }
-            (Mode::Normal | Mode::Visual, KeyCode::Char('j') | KeyCode::Down) => {
-                app.execute(Move::new(16))
-            }
-            (Mode::Normal | Mode::Visual, KeyCode::Char('k') | KeyCode::Up) => {
-                app.execute(Move::new(-16))
-            }
-            (Mode::Normal | Mode::Visual, KeyCode::Char('l') | KeyCode::Right) => {
-                app.execute(Move::new(1))
-            }
-            (Mode::Normal, KeyCode::Char('e' | '`' | '~')) => app.change_endian(),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => app.execute(Delete::new()),
-            (Mode::Normal, KeyCode::Char('v')) => app.execute(SetMode::new(Mode::Visual)),
-            (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
-                app.execute(SetMode::new(Mode::Replace))
-            }
-            (Mode::Normal, KeyCode::Char('i')) => app.execute(SetMode::new(Mode::Insert)),
-            (Mode::Normal, KeyCode::Char('a')) => {
-                app.execute(Move::new(1));
-                app.execute(SetMode::new(Mode::Insert));
-            }
-            (Mode::Normal, KeyCode::Char('x')) => {
-                app.execute(Set::new(app.config.empty_value));
-            }
-            (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
-                match (app.input, c.to_digit(16)) {
-                    (None, Some(hex)) => {
-                        app.execute(Set::new(hex as u8));
-                        app.input = Some(hex);
-                    }
-                    (Some(a), Some(b)) => {
-                        // TODO: add group
-                        app.execute(Set::new((a * 16 + b) as u8));
-                        app.execute(Move::new(1));
-
-                        if mode == Mode::Insert {
-                            app.execute(Insert);
-                        } else {
-                            app.execute(SetMode::new(Mode::Normal));
-                        }
-
-                        app.input = None;
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        },
-        _ => {}
-    }
-
-    Ok(false)
-}
-
-fn event_filename(app: &mut App) -> Result<bool> {
-    let Some(Popup::Filename(ref mut name)) = &mut app.popup else {
-        return Ok(false);
-    };
-
-    if let Event::Key(key) = event::read()? {
-        match key.code {
-            KeyCode::Enter => {
-                let path = PathBuf::from(name.clone());
-                app.write_ask(path);
-            }
-            KeyCode::Esc => {
-                app.clear_popup();
-            }
-            KeyCode::Char(ch) => name.push(ch),
-            KeyCode::Backspace => {
-                name.pop();
-            }
-            _ => {}
-        }
-    }
-
-    Ok(false)
-}
-
-fn event_viewonly(app: &mut App) -> Result<bool> {
-    if let Event::Key(key) = event::read()? {
-        match key.code {
-            KeyCode::Enter | KeyCode::Esc => {
-                app.clear_popup();
-            }
-            _ => {}
-        }
-    }
-
-    Ok(false)
-}
-
-fn event_overwrite(app: &mut App) -> Result<bool> {
-    let Some(Popup::Overwrite(path)) = &app.popup else {
-        return Ok(false);
-    };
-
-    if let Event::Key(key) = event::read()? {
-        match key.code {
-            KeyCode::Enter | KeyCode::Char('y') => {
-                app.write(path.clone());
-                app.clear_popup();
-            }
-            KeyCode::Esc | KeyCode::Char('n') => {
-                app.clear_popup();
-            }
-            _ => {}
-        }
-    }
-
-    Ok(false)
 }
 
 fn run_draw_loop<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
-        let quit = match app.popup {
-            None => event_main(&mut app)?,
-            Some(Popup::Filename(_)) => event_filename(&mut app)?,
-            Some(Popup::Error { .. }) => event_viewonly(&mut app)?,
-            Some(Popup::Overwrite(_)) => event_overwrite(&mut app)?,
+        let event = event::read()?;
+
+        let commands = match &mut app.popup {
+            Some(popup) => popup.handle(event),
+            None => app.handle(event),
         };
 
-        if quit {
+        for command in commands {
+            app.execute(command);
+        }
+
+        if app.quit {
             return Ok(());
         }
     }
@@ -626,5 +451,6 @@ fn main() -> Result<()> {
     let app = App::new(args, height, &lua)?;
 
     run_draw_loop(&mut tm.terminal, app)?;
+
     Ok(())
 }

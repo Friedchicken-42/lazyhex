@@ -1,10 +1,64 @@
-use std::{any::Any, fmt::Debug};
+use std::{fmt::Debug, mem, path::PathBuf};
 
-use crate::app::{App, HighlightUpdate, Mode, Selection};
+use crate::{
+    app::{App, HighlightUpdate, Mode, Selection},
+    popup::{Filename, Overwrite, Popup},
+};
 
-pub trait Command: Any + Debug {
+#[derive(PartialEq, Eq)]
+pub enum HistoryStatus {
+    Save,
+    Skip,
+    Merge,
+}
+
+pub trait Command {
     fn execute(&mut self, app: &mut App);
     fn undo(&self, app: &mut App);
+
+    fn history_status(&self) -> HistoryStatus {
+        HistoryStatus::Save
+    }
+}
+
+pub struct Quit;
+
+impl Command for Quit {
+    fn execute(&mut self, app: &mut App) {
+        app.quit = true;
+    }
+
+    fn undo(&self, _: &mut App) {
+        unimplemented!()
+    }
+
+    fn history_status(&self) -> HistoryStatus {
+        HistoryStatus::Skip
+    }
+}
+
+pub struct Undo;
+
+impl Command for Undo {
+    fn execute(&mut self, app: &mut App) {
+        while let Some(command) = app.history.pop() {
+            command.undo(app);
+
+            match (command.history_status(), app.history.last()) {
+                (HistoryStatus::Merge, Some(next))
+                    if next.history_status() == HistoryStatus::Merge => {}
+                _ => break,
+            }
+        }
+    }
+
+    fn undo(&self, _: &mut App) {
+        unimplemented!()
+    }
+
+    fn history_status(&self) -> HistoryStatus {
+        HistoryStatus::Skip
+    }
 }
 
 #[derive(Debug)]
@@ -45,7 +99,7 @@ impl Command for SetMode {
             }
             Mode::Replace => {}
             Mode::Insert => {
-                app.execute(Insert);
+                app.execute(Box::new(Insert));
             }
         }
     }
@@ -93,6 +147,10 @@ impl Command for Move {
 
     fn undo(&self, app: &mut App) {
         Move(-self.0).execute(app);
+    }
+
+    fn history_status(&self) -> HistoryStatus {
+        HistoryStatus::Merge
     }
 }
 
@@ -194,6 +252,7 @@ impl Command for Set {
     fn execute(&mut self, app: &mut App) {
         let range = app.selected();
         let old = &app.data[range.clone()].to_vec();
+        app.edited = true;
 
         if self.0.len() == 1 {
             for i in range {
@@ -231,4 +290,69 @@ impl Command for Insert {
     fn undo(&self, app: &mut App) {
         Delete::new().execute(app);
     }
+}
+
+pub struct OpenPopup(Option<Box<dyn Popup>>);
+
+impl OpenPopup {
+    pub fn new(popup: Box<dyn Popup>) -> Self {
+        Self(Some(popup))
+    }
+}
+
+impl Command for OpenPopup {
+    fn execute(&mut self, app: &mut App) {
+        let mut local = None;
+        mem::swap(&mut self.0, &mut local);
+
+        if let Some(popup) = local {
+            app.set_popup(popup);
+        }
+    }
+
+    fn undo(&self, _: &mut App) {}
+}
+
+pub struct ClosePopup;
+
+impl Command for ClosePopup {
+    fn execute(&mut self, app: &mut App) {
+        app.clear_popup();
+    }
+
+    fn undo(&self, _: &mut App) {}
+}
+
+pub struct Write;
+
+impl Command for Write {
+    fn execute(&mut self, app: &mut App) {
+        match &app.path {
+            None => {
+                let popup = Box::new(Filename::new());
+                OpenPopup::new(popup).execute(app);
+            }
+            Some(path) => match path.exists() {
+                true => {
+                    let path = path.to_string_lossy().to_string();
+                    let popup = Box::new(Overwrite(path));
+                    OpenPopup::new(popup).execute(app);
+                }
+                false => app.write(),
+            },
+        }
+    }
+
+    fn undo(&self, _: &mut App) {}
+}
+
+pub struct Save(pub String);
+
+impl Command for Save {
+    fn execute(&mut self, app: &mut App) {
+        app.path = Some(PathBuf::from(self.0.clone()));
+        app.write();
+    }
+
+    fn undo(&self, _: &mut App) {}
 }
