@@ -1,7 +1,7 @@
 use std::{fmt::Debug, mem, path::PathBuf};
 
 use crate::{
-    app::{App, HighlightUpdate, Mode, Selection},
+    app::{App, Highlight, HighlightUpdate, Mode, Selection},
     popup::{Filename, Overwrite, Popup},
 };
 
@@ -355,4 +355,16 @@ impl Command for Save {
     }
 
     fn undo(&self, _: &mut App) {}
+}
+
+pub struct CreateHighlight(pub Highlight);
+
+impl Command for CreateHighlight {
+    fn execute(&mut self, app: &mut App) {
+        app.highlights.push(self.0.clone());
+    }
+
+    fn undo(&self, app: &mut App) {
+        app.highlights.pop();
+    }
 }

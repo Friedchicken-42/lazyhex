@@ -11,7 +11,7 @@ use crate::{
         Undo, Write,
     },
     config::{Config, Endian, HighlightOnDelete},
-    popup::{Popup, ViewOnly},
+    popup::{NewHighlight, Popup, ViewOnly},
     Args,
 };
 
@@ -25,7 +25,7 @@ pub enum Selection {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Highlight {
     pub start: usize,
     pub end: usize,
@@ -161,16 +161,6 @@ pub enum Mode {
     Insert,
 }
 
-/*
-#[derive(PartialEq)]
-pub enum Popup {
-    Filename(String),
-    Error { title: String, content: String },
-    Overwrite(PathBuf),
-    Highlight,
-}
-*/
-
 pub enum HighlightUpdate {
     Add,
     Remove,
@@ -249,7 +239,6 @@ impl<'lua> App<'lua> {
                 (Mode::Normal | Mode::Visual, KeyCode::Char('l') | KeyCode::Right) => {
                     vec![Box::new(Move::new(1))]
                 }
-
                 (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
                     if key.modifiers == KeyModifiers::CONTROL =>
                 {
@@ -286,6 +275,12 @@ impl<'lua> App<'lua> {
                 }
                 (Mode::Normal, KeyCode::Char('w')) => {
                     vec![Box::new(Write)]
+                }
+
+                (Mode::Normal | Mode::Visual, KeyCode::Char('H')) => {
+                    let range = self.selected();
+                    let popup = Box::new(NewHighlight::new(range));
+                    vec![Box::new(OpenPopup::new(popup))]
                 }
 
                 (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
