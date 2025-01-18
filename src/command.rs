@@ -99,7 +99,7 @@ impl Command for SetMode {
             }
             Mode::Replace => {}
             Mode::Insert => {
-                app.execute(Box::new(Insert));
+                // app.execute(Box::new(Insert));
             }
         }
     }
@@ -289,6 +289,24 @@ impl Command for Insert {
 
     fn undo(&self, app: &mut App) {
         Delete::new().execute(app);
+    }
+}
+
+pub struct Add;
+
+impl Command for Add {
+    fn execute(&mut self, app: &mut App) {
+        let current = app.single_selection();
+        app.data.insert(current + 1, 0);
+        app.update_highlights(HighlightUpdate::Add);
+        app.edited = true;
+
+        Move(1).execute(app);
+    }
+
+    fn undo(&self, app: &mut App) {
+        Delete::new().execute(app);
+        Move(-1).execute(app);
     }
 }
 

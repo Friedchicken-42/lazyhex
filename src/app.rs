@@ -7,7 +7,7 @@ use ratatui::style::Color;
 
 use crate::{
     command::{
-        Command, Delete, HistoryStatus, Insert, Move, OpenPopup, Position, Quit, Set, SetMode,
+        Add, Command, Delete, HistoryStatus, Insert, Move, OpenPopup, Position, Quit, Set, SetMode,
         Undo, Write,
     },
     config::{Config, Endian, HighlightOnDelete},
@@ -266,9 +266,11 @@ impl<'lua> App<'lua> {
                 (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
                     vec![Box::new(SetMode::new(Mode::Replace))]
                 }
-                (Mode::Normal, KeyCode::Char('i')) => vec![Box::new(SetMode::new(Mode::Insert))],
+                (Mode::Normal, KeyCode::Char('i')) => {
+                    vec![Box::new(SetMode::new(Mode::Insert)), Box::new(Insert)]
+                }
                 (Mode::Normal, KeyCode::Char('a')) => {
-                    vec![Box::new(Move::new(1)), Box::new(SetMode::new(Mode::Insert))]
+                    vec![Box::new(SetMode::new(Mode::Insert)), Box::new(Add)]
                 }
                 (Mode::Normal, KeyCode::Char('x')) => {
                     vec![Box::new(Set::new(self.config.empty_value))]
@@ -295,9 +297,8 @@ impl<'lua> App<'lua> {
 
                             vec![
                                 Box::new(Set::new((a * 16 + b) as u8)),
-                                Box::new(Move::new(1)),
                                 if mode == Mode::Insert {
-                                    Box::new(Insert)
+                                    Box::new(Add)
                                 } else {
                                     Box::new(SetMode::new(Mode::Normal))
                                 },
