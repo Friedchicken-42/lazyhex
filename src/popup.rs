@@ -76,7 +76,7 @@ impl Popup for Filename {
 
         if let Event::Key(key) = event {
             match key.code {
-                KeyCode::Enter => return vec![close, Box::new(Save(self.0.clone()))],
+                KeyCode::Enter => return vec![close, Save::new(self.0.clone())],
                 KeyCode::Esc => return vec![close],
                 KeyCode::Backspace => {
                     self.0.pop();
@@ -124,7 +124,7 @@ impl Popup for Overwrite {
         if let Event::Key(key) = event {
             match key.code {
                 KeyCode::Enter | KeyCode::Char('y') => {
-                    return vec![close, Box::new(Save(self.0.clone()))]
+                    return vec![close, Save::new(self.0.clone())]
                 }
                 KeyCode::Esc | KeyCode::Char('n' | 'q') => return vec![close],
                 _ => {}
@@ -226,14 +226,14 @@ impl Popup for NewHighlight {
                             title: "Highligh Error".into(),
                             content: format!("Error parsing background color: {:?}", self.bg),
                         };
-                        return vec![Box::new(OpenPopup::new(Box::new(popup)))];
+                        return vec![OpenPopup::new(Box::new(popup))];
                     };
                     let Ok(fg) = Color::from_str(&self.fg) else {
                         let popup = ViewOnly {
                             title: "Highligh Error".into(),
                             content: format!("Error parsing foregroung color: {:?}", self.fg),
                         };
-                        return vec![Box::new(OpenPopup::new(Box::new(popup)))];
+                        return vec![OpenPopup::new(Box::new(popup))];
                     };
 
                     let hightlight = Highlight {
@@ -245,9 +245,9 @@ impl Popup for NewHighlight {
                     };
 
                     return vec![
-                        Box::new(ClosePopup),
-                        Box::new(CreateHighlight(hightlight)),
-                        Box::new(SetMode::new(Mode::Normal)),
+                        ClosePopup::new(),
+                        CreateHighlight::new(hightlight),
+                        SetMode::new(Mode::Normal),
                     ];
                 }
 

@@ -93,7 +93,7 @@ fn ui_index(f: &mut Frame, app: &App, area: Rect) {
 
     let range = app.visible_range();
     let start = range.start / 16;
-    let end = (start + app.height as usize).min(range.end / 16 + 1);
+    let end = (start + app.height as usize).min((range.end - 1) / 16 + 1);
 
     let mut lines = Vec::with_capacity(end - start + 1);
     lines.push(Line::raw(""));

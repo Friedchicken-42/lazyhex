@@ -23,6 +23,12 @@ pub trait Command {
 
 pub struct Quit;
 
+impl Quit {
+    pub fn new() -> Box<Self> {
+        Box::new(Self)
+    }
+}
+
 impl Command for Quit {
     fn execute(&mut self, app: &mut App) {
         app.quit = true;
@@ -38,6 +44,12 @@ impl Command for Quit {
 }
 
 pub struct Undo;
+
+impl Undo {
+    pub fn new() -> Box<Self> {
+        Box::new(Self)
+    }
+}
 
 impl Command for Undo {
     fn execute(&mut self, app: &mut App) {
@@ -68,11 +80,11 @@ pub struct SetMode {
 }
 
 impl SetMode {
-    pub fn new(mode: Mode) -> Self {
-        Self {
+    pub fn new(mode: Mode) -> Box<Self> {
+        Box::new(Self {
             mode,
             selection: Selection::Single(0),
-        }
+        })
     }
 }
 
@@ -97,10 +109,7 @@ impl Command for SetMode {
                     visual => visual.clone(),
                 };
             }
-            Mode::Replace => {}
-            Mode::Insert => {
-                // app.execute(Box::new(Insert));
-            }
+            _ => {}
         }
     }
 
@@ -110,12 +119,11 @@ impl Command for SetMode {
     }
 }
 
-#[derive(Debug)]
 pub struct Move(i32);
 
 impl Move {
-    pub fn new(offset: i32) -> Self {
-        Self(offset)
+    pub fn new(offset: i32) -> Box<Self> {
+        Box::new(Self(offset))
     }
 }
 
@@ -154,15 +162,14 @@ impl Command for Move {
     }
 }
 
-#[derive(Debug)]
 pub struct Position {
     new: usize,
     old: usize,
 }
 
 impl Position {
-    pub fn new(pos: usize) -> Self {
-        Position { new: pos, old: 0 }
+    pub fn new(pos: usize) -> Box<Self> {
+        Box::new(Position { new: pos, old: 0 })
     }
 }
 
@@ -192,12 +199,11 @@ impl Command for Position {
     }
 }
 
-#[derive(Debug)]
 pub struct Delete(Vec<u8>);
 
 impl Delete {
-    pub fn new() -> Self {
-        Self(vec![])
+    pub fn new() -> Box<Self> {
+        Box::new(Self(vec![]))
     }
 }
 
@@ -230,21 +236,20 @@ impl Command for Delete {
 
     fn undo(&self, app: &mut App) {
         for value in &self.0 {
-            Insert.execute(app);
+            Insert::new().execute(app);
             Set::new(*value).execute(app);
-            Move(1).execute(app);
+            Move::new(1).execute(app);
         }
 
-        Move(-1).execute(app);
+        Move::new(-1).execute(app);
     }
 }
 
-#[derive(Debug)]
 pub struct Set(Vec<u8>);
 
 impl Set {
-    pub fn new(value: u8) -> Self {
-        Self(vec![value])
+    pub fn new(value: u8) -> Box<Self> {
+        Box::new(Self(vec![value]))
     }
 }
 
@@ -276,8 +281,13 @@ impl Command for Set {
     }
 }
 
-#[derive(Debug)]
 pub struct Insert;
+
+impl Insert {
+    pub fn new() -> Box<Self> {
+        Box::new(Self)
+    }
+}
 
 impl Command for Insert {
     fn execute(&mut self, app: &mut App) {
@@ -294,6 +304,12 @@ impl Command for Insert {
 
 pub struct Add;
 
+impl Add {
+    pub fn new() -> Box<Self> {
+        Box::new(Self)
+    }
+}
+
 impl Command for Add {
     fn execute(&mut self, app: &mut App) {
         let current = app.single_selection();
@@ -301,20 +317,20 @@ impl Command for Add {
         app.update_highlights(HighlightUpdate::Add);
         app.edited = true;
 
-        Move(1).execute(app);
+        Move::new(1).execute(app);
     }
 
     fn undo(&self, app: &mut App) {
         Delete::new().execute(app);
-        Move(-1).execute(app);
+        Move::new(-1).execute(app);
     }
 }
 
 pub struct OpenPopup(Option<Box<dyn Popup>>);
 
 impl OpenPopup {
-    pub fn new(popup: Box<dyn Popup>) -> Self {
-        Self(Some(popup))
+    pub fn new(popup: Box<dyn Popup>) -> Box<Self> {
+        Box::new(Self(Some(popup)))
     }
 }
 
@@ -333,6 +349,12 @@ impl Command for OpenPopup {
 
 pub struct ClosePopup;
 
+impl ClosePopup {
+    pub fn new() -> Box<Self> {
+        Box::new(Self)
+    }
+}
+
 impl Command for ClosePopup {
     fn execute(&mut self, app: &mut App) {
         app.clear_popup();
@@ -342,6 +364,12 @@ impl Command for ClosePopup {
 }
 
 pub struct Write;
+
+impl Write {
+    pub fn new() -> Box<Self> {
+        Box::new(Self)
+    }
+}
 
 impl Command for Write {
     fn execute(&mut self, app: &mut App) {
@@ -364,7 +392,13 @@ impl Command for Write {
     fn undo(&self, _: &mut App) {}
 }
 
-pub struct Save(pub String);
+pub struct Save(String);
+
+impl Save {
+    pub fn new(filename: String) -> Box<Self> {
+        Box::new(Self(filename))
+    }
+}
 
 impl Command for Save {
     fn execute(&mut self, app: &mut App) {
@@ -375,7 +409,13 @@ impl Command for Save {
     fn undo(&self, _: &mut App) {}
 }
 
-pub struct CreateHighlight(pub Highlight);
+pub struct CreateHighlight(Highlight);
+
+impl CreateHighlight {
+    pub fn new(highlight: Highlight) -> Box<Self> {
+        Box::new(Self(highlight))
+    }
+}
 
 impl Command for CreateHighlight {
     fn execute(&mut self, app: &mut App) {

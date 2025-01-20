@@ -222,67 +222,67 @@ impl<'lua> App<'lua> {
                     };
 
                     let command = OpenPopup::new(Box::new(popup));
-                    vec![Box::new(command)]
+                    vec![command]
                 }
-                (_, KeyCode::Char('q')) => vec![Box::new(Quit)],
+                (_, KeyCode::Char('q')) => vec![Quit::new()],
 
-                (_, KeyCode::Esc) => vec![Box::new(SetMode::new(Mode::Normal))],
+                (_, KeyCode::Esc) => vec![SetMode::new(Mode::Normal)],
                 (Mode::Normal | Mode::Visual, KeyCode::Char('h') | KeyCode::Left) => {
-                    vec![Box::new(Move::new(-1))]
+                    vec![Move::new(-1)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('j') | KeyCode::Down) => {
-                    vec![Box::new(Move::new(16))]
+                    vec![Move::new(16)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('k') | KeyCode::Up) => {
-                    vec![Box::new(Move::new(-16))]
+                    vec![Move::new(-16)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('l') | KeyCode::Right) => {
-                    vec![Box::new(Move::new(1))]
+                    vec![Move::new(1)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('d' | 'f'))
                     if key.modifiers == KeyModifiers::CONTROL =>
                 {
-                    vec![Box::new(Move::new(self.config.page))]
+                    vec![Move::new(self.config.page)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('u' | 'b'))
                     if key.modifiers == KeyModifiers::CONTROL =>
                 {
-                    vec![Box::new(Move::new(-self.config.page))]
+                    vec![Move::new(-self.config.page)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('g')) => {
-                    vec![Box::new(Position::new(0))]
+                    vec![Position::new(0)]
                 }
                 (Mode::Normal | Mode::Visual, KeyCode::Char('G')) => {
-                    vec![Box::new(Position::new(self.data.len() - 1))]
+                    vec![Position::new(self.data.len() - 1)]
                 }
-                (_, KeyCode::Char('u')) => vec![Box::new(Undo)],
+                (_, KeyCode::Char('u')) => vec![Undo::new()],
 
                 (Mode::Normal, KeyCode::Char('e' | '`' | '~')) => {
                     self.change_endian();
                     vec![]
                 }
-                (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => vec![Box::new(Delete::new())],
-                (Mode::Normal, KeyCode::Char('v')) => vec![Box::new(SetMode::new(Mode::Visual))],
+                (Mode::Normal | Mode::Visual, KeyCode::Char('d')) => vec![Delete::new()],
+                (Mode::Normal, KeyCode::Char('v')) => vec![SetMode::new(Mode::Visual)],
                 (Mode::Normal | Mode::Visual, KeyCode::Char('r')) => {
-                    vec![Box::new(SetMode::new(Mode::Replace))]
+                    vec![SetMode::new(Mode::Replace)]
                 }
                 (Mode::Normal, KeyCode::Char('i')) => {
-                    vec![Box::new(SetMode::new(Mode::Insert)), Box::new(Insert)]
+                    vec![SetMode::new(Mode::Insert), Box::new(Insert)]
                 }
                 (Mode::Normal, KeyCode::Char('a')) => {
-                    vec![Box::new(SetMode::new(Mode::Insert)), Box::new(Add)]
+                    vec![SetMode::new(Mode::Insert), Box::new(Add)]
                 }
                 (Mode::Normal, KeyCode::Char('x')) => {
-                    vec![Box::new(Set::new(self.config.empty_value))]
+                    vec![Set::new(self.config.empty_value)]
                 }
                 (Mode::Normal, KeyCode::Char('w')) => {
-                    vec![Box::new(Write)]
+                    vec![Write::new()]
                 }
 
                 (Mode::Normal | Mode::Visual, KeyCode::Char('H')) => {
                     let range = self.selected();
                     let popup = Box::new(NewHighlight::new(range));
-                    vec![Box::new(OpenPopup::new(popup))]
+                    vec![OpenPopup::new(popup)]
                 }
 
                 (mode @ (Mode::Replace | Mode::Insert), KeyCode::Char(c)) => {
@@ -290,17 +290,17 @@ impl<'lua> App<'lua> {
                         (None, Some(hex)) => {
                             self.input = Some(hex);
 
-                            vec![Box::new(Set::new(hex as u8))]
+                            vec![Set::new(hex as u8)]
                         }
                         (Some(a), Some(b)) => {
                             self.input = None;
 
                             vec![
-                                Box::new(Set::new((a * 16 + b) as u8)),
+                                Set::new((a * 16 + b) as u8),
                                 if mode == Mode::Insert {
-                                    Box::new(Add)
+                                    Add::new()
                                 } else {
-                                    Box::new(SetMode::new(Mode::Normal))
+                                    SetMode::new(Mode::Normal)
                                 },
                             ]
                         }
